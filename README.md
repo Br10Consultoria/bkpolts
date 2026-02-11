@@ -1,257 +1,193 @@
-# Backup Automático OLTs Datacom
+# OLT Backup — Multi-Vendor (Docker)
 
-Sistema automatizado de backup para OLTs Datacom com envio via Telegram.
+Sistema modular de backup automatizado de OLTs, com suporte a múltiplos fabricantes. Roda em Docker com agendamento via cron e envia notificações e arquivos de backup diretamente ao Telegram.
 
-## 🚀 Características
+---
 
-- ✅ Backup automático de 11 OLTs Datacom
-- ✅ Conexão via Telnet para executar comandos
-- ✅ Download dos arquivos via SCP
-- ✅ Envio automático para Telegram
-- ✅ Logs detalhados de todas as operações
-- ✅ Execução agendada (13h e 22h)
-- ✅ Containerizado com Docker
-- ✅ Configuração via variáveis de ambiente
+## Arquitetura
 
-## 📋 Pré-requisitos
+```
+bkpolts/
+├── Dockerfile              # Imagem Docker (única para todos os vendors)
+├── docker-compose.yml      # Orquestração do container
+├── entrypoint.sh           # Gera crontab dinamicamente conforme VENDOR
+├── requirements.txt        # Dependências Python
+├── .env                    # Credenciais e configuração (NÃO versionado)
+├── .env.example            # Modelo de configuração
+│
+├── common/                 # Módulo compartilhado por todos os vendors
+│   ├── __init__.py
+│   ├── telegram.py         # Envio de mensagens e arquivos ao Telegram
+│   ├── helpers.py          # Logging, Telnet, FTP download, cleanup
+│   └── parser.py           # Parser de OLTs a partir do .env
+│
+└── vendors/                # Um diretório por fabricante
+    ├── datacom/
+    │   └── backup.py       # Datacom — Telnet + TFTP
+    ├── zte/
+    │   └── backup.py       # ZTE padrão + ZTE Titan — Telnet + FTP
+    ├── parks/
+    │   └── backup.py       # Parks — Telnet + FTP
+    ├── fiberhome/
+    │   └── backup.py       # Fiberhome — Telnet + FTP
+    └── huawei/
+        └── backup.py       # Huawei — Telnet + FTP
+```
 
-- Docker e Docker Compose instalados
-- Acesso de rede às OLTs (portas 23 para Telnet e 22 para SSH/SCP)
-- Bot do Telegram criado (via @BotFather)
-- Chat ID do Telegram
+---
 
-## 🔧 Instalação
+## Como funciona
+
+O `entrypoint.sh` lê a variável `VENDOR` do `.env` e gera o crontab automaticamente apenas para os vendors selecionados. Você controla **tudo** pelo `.env`:
+
+| Variável | Descrição | Exemplo |
+|---|---|---|
+| `VENDOR` | Vendors a executar (vírgula) | `datacom,zte,parks` |
+| `CRON_HOUR_1` | Primeiro horário do dia | `13` |
+| `CRON_HOUR_2` | Segundo horário do dia | `22` |
+| `TZ` | Timezone | `America/Bahia` |
+
+---
+
+## Protocolos por Vendor
+
+| Vendor | Protocolo de acesso | Protocolo de transferência |
+|---|---|---|
+| **Datacom** | Telnet | TFTP |
+| **ZTE** | Telnet | FTP |
+| **ZTE Titan** | Telnet | FTP |
+| **Parks** | Telnet | FTP |
+| **Fiberhome** | Telnet | FTP |
+| **Huawei** | Telnet | FTP |
+
+---
+
+## Instalação
 
 ### 1. Clonar o repositório
 
 ```bash
-cd /home
-git clone https://github.com/seu-usuario/olt-backup.git oltdatacom
-cd oltdatacom
+git clone https://github.com/Br10Consultoria/bkpolts.git
+cd bkpolts
 ```
 
-### 2. Configurar variáveis de ambiente
+### 2. Configurar credenciais
 
 ```bash
 cp .env.example .env
 nano .env
 ```
 
-Edite o arquivo `.env` e configure:
+Preencha as OLTs no formato `NOME:IP:USUARIO:SENHA` separadas por vírgula:
+
+```env
+VENDOR=datacom,zte
+
+DATACOM_OLTS=DC1:172.24.25.2:backupolt:MinhaSenh@,DC2:172.24.25.6:backupolt:MinhaSenh@
+ZTE_OLTS=ZTE_ARAMARI:10.100.11.2:sgpoltzte:MinhaSenh@
+ZTE_TITAN_OLTS=ZTE_TITAN_CANAVIEIRAS:10.11.10.10:sgpoltzte:MinhaSenh@
+```
+
+### 3. Subir o container
 
 ```bash
-# Configurações do Telegram (OBRIGATÓRIO)
-TELEGRAM_BOT_TOKEN=seu_token_do_botfather
-TELEGRAM_CHAT_ID=seu_chat_id
-
-# As demais configurações já estão com os valores padrão das OLTs
-# Apenas altere se necessário
+docker compose up -d --build
 ```
 
-### 3. Como obter o Token e Chat ID do Telegram
-
-#### Token do Bot:
-1. Abra o Telegram e procure por `@BotFather`
-2. Digite `/newbot` e siga as instruções
-3. Copie o token fornecido (formato: `123456789:ABCdefGhIJKlmNoPQRsTUVwxyZ`)
-
-#### Chat ID:
-1. Adicione o bot criado em um grupo ou conversa
-2. Envie uma mensagem qualquer para o bot
-3. Acesse: `https://api.telegram.org/bot<SEU_TOKEN>/getUpdates`
-4. Procure por `"chat":{"id":` no JSON retornado
-5. Use esse número como Chat ID
-
-### 4. Construir e iniciar o container
+### 4. Verificar se o cron foi configurado
 
 ```bash
-docker-compose up -d --build
+docker logs olt-backup
 ```
 
-## 📊 Monitoramento
-
-### Ver logs em tempo real
-
-```bash
-docker-compose logs -f
-```
-
-### Ver logs salvos
-
-```bash
-tail -f logs/backup_$(date +%Y%m%d).log
-```
-
-### Verificar status do container
-
-```bash
-docker-compose ps
-```
-
-## 🕐 Agendamento
-
-O backup é executado automaticamente:
-- **13:00** - Backup diário 1
-- **22:00** - Backup diário 2
-
-Para alterar os horários, edite o arquivo `crontab` e reconstrua o container.
-
-## 🔍 Estrutura de Diretórios
+Saída esperada:
 
 ```
-/home/oltdatacom/
-├── backup_olt.py           # Script principal
-├── docker-compose.yml      # Configuração Docker
-├── Dockerfile              # Imagem Docker
-├── requirements.txt        # Dependências Python
-├── crontab                 # Agendamento
-├── entrypoint.sh          # Script de inicialização
-├── .env                   # Variáveis de ambiente (NÃO COMMITAR)
-├── .env.example           # Exemplo de configuração
-├── logs/                  # Logs diários
-│   └── backup_YYYYMMDD.log
-└── backups/               # Backups temporários (removidos após envio)
+[OK] Vendor 'datacom' agendado às 13:00 e 22:00
+[OK] Vendor 'zte' agendado às 13:00 e 22:00
+=============================================
+  OLT Backup Docker — Multi-Vendor
+  Vendors: datacom,zte
+  Horários: 13:00 e 22:00 (America/Bahia)
+=============================================
 ```
-
-## 🔄 Executar Backup Manualmente
-
-### Dentro do container:
-
-```bash
-docker-compose exec olt-backup python3 /home/oltdatacom/backup_olt.py
-```
-
-### Ou entrando no container:
-
-```bash
-docker-compose exec olt-backup bash
-cd /home/oltdatacom
-python3 backup_olt.py
-```
-
-## 🛠️ Manutenção
-
-### Atualizar código do GitHub
-
-```bash
-cd /home/oltdatacom
-git pull
-docker-compose down
-docker-compose up -d --build
-```
-
-### Reiniciar container
-
-```bash
-docker-compose restart
-```
-
-### Ver uso de recursos
-
-```bash
-docker stats olt-backup-datacom
-```
-
-### Limpar logs antigos (manter últimos 30 dias)
-
-```bash
-find /home/oltdatacom/logs -name "*.log" -mtime +30 -delete
-```
-
-## 📱 Notificações Telegram
-
-O sistema envia:
-
-1. **Mensagem de início** - Quando o backup inicia
-2. **Arquivos de backup** - Cada OLT que foi feita backup com sucesso
-3. **Relatório final** - Resumo com sucessos e falhas
-
-Exemplo de relatório:
-```
-📊 Relatório de Backup OLTs Datacom
-
-✅ Sucessos: 10/11
-❌ Falhas: 1/11
-
-⚠️ Falhas em:
-• POP_FORMIGA (falha no envio Telegram)
-
-🕐 Concluído em: 27/11/2024 13:45:23
-```
-
-## 🔒 Segurança
-
-- ⚠️ **NUNCA** commite o arquivo `.env` no Git
-- As senhas estão em variáveis de ambiente
-- Use `network_mode: host` apenas se necessário
-- Considere usar secrets do Docker Swarm em produção
-
-## 🐛 Troubleshooting
-
-### Container não inicia
-
-```bash
-docker-compose logs
-```
-
-### OLT não conecta via Telnet
-
-- Verifique conectividade: `docker-compose exec olt-backup ping 10.100.10.210`
-- Verifique porta Telnet: `docker-compose exec olt-backup telnet 10.100.10.210 23`
-
-### Falha no SCP
-
-- Verifique se o SSH está habilitado na OLT
-- Confirme que as credenciais estão corretas
-- Teste manualmente: `docker-compose exec olt-backup bash` e tente fazer SCP
-
-### Telegram não envia
-
-- Verifique se o token está correto
-- Confirme o Chat ID
-- Teste o bot manualmente enviando `/start`
-
-## 📝 Logs Detalhados
-
-O sistema registra:
-
-- ✅ Tentativas de conexão
-- ✅ Comandos enviados e respostas
-- ✅ Status de cada etapa (Telnet, Save, SCP, Telegram)
-- ✅ Erros com stack trace completo
-- ✅ Relatório final de cada execução
-
-## 🔧 Configurações Avançadas
-
-### Executar backup na inicialização
-
-Adicione no `docker-compose.yml`:
-
-```yaml
-environment:
-  - RUN_ON_STARTUP=true
-```
-
-### Alterar timezone
-
-Edite no `docker-compose.yml`:
-
-```yaml
-environment:
-  - TZ=America/Sao_Paulo
-```
-
-## 📞 Suporte
-
-Para problemas ou dúvidas:
-1. Verifique os logs: `docker-compose logs`
-2. Leia a seção de Troubleshooting
-3. Abra uma issue no GitHub
-
-## 📄 Licença
-
-MIT License
 
 ---
 
-**Desenvolvido para backup automático de OLTs Datacom** 🚀
+## Uso
+
+### Executar backup manualmente (teste)
+
+```bash
+# Testar um vendor específico
+docker exec olt-backup python3 /app/vendors/datacom/backup.py
+docker exec olt-backup python3 /app/vendors/zte/backup.py
+docker exec olt-backup python3 /app/vendors/parks/backup.py
+```
+
+### Ver logs
+
+```bash
+# Logs do container
+docker compose logs -f olt-backup
+
+# Log de um vendor específico
+docker exec olt-backup cat /app/logs/backup_datacom.log
+docker exec olt-backup cat /app/logs/backup_zte.log
+```
+
+### Parar
+
+```bash
+docker compose down
+```
+
+### Reconstruir após alterar scripts
+
+```bash
+docker compose up -d --build
+```
+
+---
+
+## Adicionar um novo vendor
+
+1. Crie o diretório `vendors/novovendor/`.
+2. Crie o arquivo `vendors/novovendor/backup.py` seguindo o padrão dos demais.
+3. Adicione `NOVOVENDOR_OLTS=...` no `.env`.
+4. Adicione `novovendor` na variável `VENDOR` do `.env`.
+5. Reconstrua o container: `docker compose up -d --build`.
+
+---
+
+## Formato das OLTs no .env
+
+Todas as OLTs seguem o mesmo formato:
+
+```
+VENDOR_OLTS=NOME1:IP:USUARIO:SENHA,NOME2:IP:USUARIO:SENHA
+```
+
+Se a senha contiver `:`, não há problema — o parser reconhece que tudo após o terceiro `:` é a senha.
+
+---
+
+## Notificações Telegram
+
+Cada vendor envia ao Telegram:
+
+1. Mensagem de início com total de OLTs.
+2. Após cada OLT: arquivo de backup + mensagem de sucesso ou falha com progresso `[1/5]`.
+3. Resumo final com lista de sucessos e falhas.
+
+---
+
+## Observações sobre Fiberhome e Huawei
+
+Os scripts de Fiberhome e Huawei incluem comandos genéricos que podem precisar de ajuste conforme o modelo e firmware específico da sua OLT. Os pontos de ajuste estão marcados com comentários no código:
+
+```python
+# ============================================================
+# AJUSTE ESTE COMANDO conforme o modelo/firmware da sua OLT
+# ============================================================
+```

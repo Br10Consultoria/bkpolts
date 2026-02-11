@@ -1,5 +1,0 @@
-SHELL=/bin/bash
-PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
-
-0 13 * * * root python /app/oltdatacom/backup_datacom.py && python /app/parks/bkpinoveparks.py >> /app/logs/backup-geral.log 2>&1
-0 22 * * * root python /app/oltdatacom/backup_datacom.py && python /app/parks/bkpinoveparks.py >> /app/logs/backup-geral.log 2>&1

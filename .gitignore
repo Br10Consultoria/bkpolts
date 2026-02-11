@@ -1,0 +1,12 @@
+# Credenciais
+.env
+
+# Logs e backups
+logs/
+backups/
+*.log
+
+# Python
+__pycache__/
+*.pyc
+*.pyo

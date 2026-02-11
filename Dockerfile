@@ -2,11 +2,16 @@ FROM python:3.11-slim
 
 ENV TZ=America/Bahia
 ENV PYTHONUNBUFFERED=1
+ENV PYTHONPATH=/app
 
-# Pacotes básicos + cron
+# Pacotes do sistema: cron + timezone
 RUN apt-get update && \
-    apt-get install -y cron tzdata && \
+    apt-get install -y --no-install-recommends cron tzdata && \
+    apt-get clean && \
     rm -rf /var/lib/apt/lists/*
+
+# Timezone
+RUN ln -snf /usr/share/zoneinfo/$TZ /etc/localtime && echo $TZ > /etc/timezone
 
 WORKDIR /app
 
@@ -14,21 +19,13 @@ WORKDIR /app
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
-# Copia estrutura inicial (será sobrescrito pelos volumes)
+# Copia toda a estrutura do projeto
 COPY . /app
 
-# ✅ Criar diretórios que o script espera
-RUN mkdir -p /app/logs \
-             /app/backups \
-             /home/inove/backups \
-             /home/inove/oltdatacom
+# Cria diretórios necessários
+RUN mkdir -p /app/logs /app/backups
 
-# Cron job
-COPY cronjob /etc/cron.d/bkpoltinove
-RUN chmod 0644 /etc/cron.d/bkpoltinove && \
-    crontab /etc/cron.d/bkpoltinove
+# Permissões
+RUN chmod +x /app/entrypoint.sh
 
-# Log do cron
-RUN touch /var/log/cron.log
-
-CMD ["cron", "-f"]
+ENTRYPOINT ["/app/entrypoint.sh"]

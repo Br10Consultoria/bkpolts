@@ -1,23 +1,24 @@
 services:
-  bkpoltinove:
-    build: .
-    container_name: bkpoltinove
-    network_mode: "host"
+  olt-backup:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: olt-backup
     restart: unless-stopped
     env_file:
       - .env
     volumes:
-      # ✅ Montar diretórios específicos (não tudo)
-      - /home/inove/oltdatacom:/app/oltdatacom
-      - /home/inove/parks:/app/parks
-      - /home/inove/logs:/app/logs
-      
-      # 🔴 CRÍTICO: Montar backups no mesmo caminho que o script espera
-      - /home/inove/backups:/home/inove/backups
-      
-      # Scripts e configs gerais
-      - /home/inove/cronjob:/app/cronjob
-      - /home/inove/requirements.txt:/app/requirements.txt
+      - ./vendors:/app/vendors        # scripts de cada vendor
+      - ./common:/app/common           # módulo compartilhado
+      - backup-data:/app/backups       # arquivos de backup temporários
+      - backup-logs:/app/logs          # logs de execução
       - /etc/localtime:/etc/localtime:ro
     environment:
-      - TZ=America/Bahia
+      - TZ=${TZ:-America/Bahia}
+    network_mode: host                 # acesso à rede local das OLTs
+
+volumes:
+  backup-data:
+    driver: local
+  backup-logs:
+    driver: local
