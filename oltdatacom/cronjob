@@ -1,0 +1,2 @@
+0 13 * * * root python3 /app/backup_datacom.py >> /app/logs/backup_log.txt 2>&1
+0 22 * * * root python3 /app/backup_datacom.py >> /app/logs/backup_log.txt 2>&1

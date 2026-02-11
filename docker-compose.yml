@@ -1,0 +1,23 @@
+services:
+  bkpoltinove:
+    build: .
+    container_name: bkpoltinove
+    network_mode: "host"
+    restart: unless-stopped
+    env_file:
+      - .env
+    volumes:
+      # ✅ Montar diretórios específicos (não tudo)
+      - /home/inove/oltdatacom:/app/oltdatacom
+      - /home/inove/parks:/app/parks
+      - /home/inove/logs:/app/logs
+      
+      # 🔴 CRÍTICO: Montar backups no mesmo caminho que o script espera
+      - /home/inove/backups:/home/inove/backups
+      
+      # Scripts e configs gerais
+      - /home/inove/cronjob:/app/cronjob
+      - /home/inove/requirements.txt:/app/requirements.txt
+      - /etc/localtime:/etc/localtime:ro
+    environment:
+      - TZ=America/Bahia
