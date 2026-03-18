@@ -227,6 +227,11 @@ Exemplos:
         action="store_true",
         help="Exibe configuração atual (vendors, horários, timezone) e encerra",
     )
+    parser.add_argument(
+        "--test",
+        action="store_true",
+        help="Valida o ambiente: testa variáveis .env, Telegram e conectividade Telnet",
+    )
     args = parser.parse_args()
 
     env = load_env(ENV_FILE)
@@ -247,6 +252,20 @@ Exemplos:
         log.info("Modo --now: executando todos os vendors imediatamente...")
         run_all_vendors(env)
         sys.exit(0)
+
+    # Modo --test
+    if args.test:
+        test_script = BASE_DIR / "test.py"
+        if not test_script.exists():
+            log.error("test.py não encontrado em %s", BASE_DIR)
+            sys.exit(1)
+        merged_env = {**os.environ, **env}
+        result = subprocess.run(
+            [sys.executable, str(test_script)],
+            env=merged_env,
+            cwd=str(BASE_DIR),
+        )
+        sys.exit(result.returncode)
 
     # Modo daemon
     log.info("Timezone  : %s", tz.key)

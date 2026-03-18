@@ -17,12 +17,9 @@ import subprocess
 import argparse
 from pathlib import Path
 
-# ============================================================
-# Configuração de paths
-# ============================================================
-
 BASE_DIR = Path(__file__).resolve().parent
 ENV_FILE = BASE_DIR / ".env"
+
 
 # Mapeamento de vendor → variáveis de OLT no .env
 VENDOR_MAP = {
@@ -206,6 +203,17 @@ Exemplos:
         action="store_true",
         help="Lista os vendors configurados e quantidade de OLTs",
     )
+    parser.add_argument(
+        "--test",
+        action="store_true",
+        help="Valida o ambiente: testa variáveis .env, Telegram e conectividade Telnet de todas as OLTs",
+    )
+    parser.add_argument(
+        "--test-vendor",
+        choices=list(VENDOR_MAP.keys()),
+        metavar="VENDOR",
+        help="Valida o ambiente apenas para um vendor específico",
+    )
 
     args = parser.parse_args()
 
@@ -214,6 +222,19 @@ Exemplos:
     if not env:
         print(f"[AVISO] Arquivo .env não encontrado em {ENV_FILE}")
         print("        Copie .env.example para .env e configure suas credenciais.\n")
+
+    # Modo --test / --test-vendor
+    if args.test or args.test_vendor:
+        test_script = BASE_DIR / "test.py"
+        if not test_script.exists():
+            print("[ERRO] test.py não encontrado.")
+            sys.exit(1)
+        cmd = [sys.executable, str(test_script)]
+        if args.test_vendor:
+            cmd += ["--vendor", args.test_vendor]
+        merged_env = {**os.environ, **load_env(ENV_FILE)}
+        result = subprocess.run(cmd, env=merged_env, cwd=str(BASE_DIR))
+        sys.exit(result.returncode)
 
     # Modo --list
     if args.list:
