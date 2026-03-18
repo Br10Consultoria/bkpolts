@@ -16,17 +16,14 @@ RUN ln -snf /usr/share/zoneinfo/America/Bahia /etc/localtime && \
 
 WORKDIR /app
 
-# Dependências Python
+# Dependências Python (instaladas na imagem — não dependem do volume)
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
-# Copia toda a estrutura do projeto
-COPY . /app
-
-# Cria diretórios necessários
+# Cria diretórios necessários (persistidos por volumes nomeados)
 RUN mkdir -p /app/logs /app/backups
 
-# Permissões
-RUN chmod +x /app/entrypoint.sh /app/run.py /app/scheduler.py
-
-ENTRYPOINT ["/app/entrypoint.sh"]
+# Usa python3 diretamente como entrypoint para evitar problema de
+# permissão do entrypoint.sh quando a raiz é montada como volume.
+# O entrypoint.sh é chamado internamente pelo scheduler.py via banner.
+ENTRYPOINT ["python3", "/app/scheduler.py"]
