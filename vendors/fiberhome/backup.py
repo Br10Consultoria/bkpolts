@@ -1,16 +1,12 @@
 #!/usr/bin/env python3
-"""
-Backup de OLTs Fiberhome — Telnet + FTP
+"""Backup de OLTs Fiberhome — Telnet + FTP
 
 Fluxo por OLT:
   1. Conecta via Telnet, faz login.
-  2. Executa: backup configuration ftp <FTP_IP> <USER> <PASS> <FILENAME>
+  2. Executa: upload ftp system <IP> <USER> <PASS> <FILENAME>
   3. Baixa o arquivo do FTP, renomeia com nome da OLT + timestamp.
   4. Envia ao Telegram.
   5. Aguarda 10s antes da próxima OLT.
-
-IMPORTANTE: O comando de backup pode variar conforme o modelo/firmware
-da OLT Fiberhome. Ajuste a função backup_fiberhome() conforme necessário.
 
 Variáveis de ambiente necessárias:
   FIBERHOME_OLTS — formato NOME:IP:USER:PASS separados por vírgula
@@ -57,22 +53,15 @@ def backup_fiberhome(olt: dict, progresso: str) -> bool:
 
         time.sleep(3)
 
-        # Entrar no modo enable/config se necessário
-        send_telnet_command(tn, "enable")
-        send_telnet_command(tn, "configure terminal")
-
         # Nome do arquivo remoto no FTP
-        ts = datetime.now().strftime("%Y%m%d_%H%M%S")
-        ftp_filename = f"{name}_backup_{ts}.cfg"
+        # Formato esperado pela OLT: backupoltfiberhome<DDMMYYYY>.cfg
+        ts_file = datetime.now().strftime("%d%m%Y")
+        ftp_filename = f"backupoltfiberhome{ts_file}.cfg"
 
-        # ============================================================
-        # AJUSTE ESTE COMANDO conforme o modelo/firmware da sua OLT
-        # Exemplos comuns:
-        #   backup configuration ftp <IP> <USER> <PASS> <FILE>
-        #   upload file startup-config ftp://<IP>/<FILE> <USER> <PASS>
-        # ============================================================
+        # Comando correto da OLT Fiberhome:
+        # upload ftp system <IP> <USER> <PASS> <FILENAME>
         backup_cmd = (
-            f"backup configuration ftp {FTP_IP} "
+            f"upload ftp system {FTP_IP} "
             f"{FTP_USER} {FTP_PASSWORD} {ftp_filename}"
         )
         send_telnet_command(tn, backup_cmd, wait_time=10)
