@@ -8,14 +8,13 @@ services:
     env_file:
       - .env
     volumes:
-      - ./vendors:/app/vendors        # scripts de cada vendor
-      - ./common:/app/common           # módulo compartilhado
-      - backup-data:/app/backups       # arquivos de backup temporários
-      - backup-logs:/app/logs          # logs de execução
+      - .:/app                           # raiz do projeto — git pull reflete imediatamente
+      - backup-data:/app/backups         # arquivos de backup temporários (volume persistente)
+      - backup-logs:/app/logs            # logs de execução (volume persistente)
       - /etc/localtime:/etc/localtime:ro
     environment:
       - TZ=America/Bahia
-    network_mode: host                 # acesso à rede local das OLTs
+    network_mode: host                   # acesso à rede local das OLTs
 
 volumes:
   backup-data:
