@@ -10,8 +10,9 @@ RUN apt-get update && \
     apt-get clean && \
     rm -rf /var/lib/apt/lists/*
 
-# Timezone do sistema
-RUN ln -snf /usr/share/zoneinfo/$TZ /etc/localtime && echo $TZ > /etc/timezone
+# Timezone fixo: America/Bahia
+RUN ln -snf /usr/share/zoneinfo/America/Bahia /etc/localtime && \
+    echo "America/Bahia" > /etc/timezone
 
 WORKDIR /app
 

@@ -14,7 +14,7 @@ services:
       - backup-logs:/app/logs          # logs de execução
       - /etc/localtime:/etc/localtime:ro
     environment:
-      - TZ=${TZ:-America/Bahia}
+      - TZ=America/Bahia
     network_mode: host                 # acesso à rede local das OLTs
 
 volumes:

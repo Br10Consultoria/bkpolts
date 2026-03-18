@@ -24,7 +24,7 @@ import argparse
 import subprocess
 from datetime import datetime, timezone
 from pathlib import Path
-from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
+from zoneinfo import ZoneInfo
 
 # ============================================================
 # Configuração de paths
@@ -81,14 +81,9 @@ def load_env(env_file: Path) -> dict:
     return env
 
 
-def get_timezone(env: dict) -> ZoneInfo:
-    """Retorna o objeto ZoneInfo baseado na variável TZ do .env."""
-    tz_name = env.get("TZ", "America/Bahia")
-    try:
-        return ZoneInfo(tz_name)
-    except ZoneInfoNotFoundError:
-        log.warning("Timezone '%s' inválida, usando America/Bahia", tz_name)
-        return ZoneInfo("America/Bahia")
+def get_timezone(_env: dict = None) -> ZoneInfo:
+    """Retorna sempre America/Bahia — timezone fixo do sistema."""
+    return ZoneInfo("America/Bahia")
 
 
 def get_schedule_hours(env: dict) -> tuple[int, int]:
@@ -184,7 +179,7 @@ def scheduler_loop():
     while True:
         # Recarrega .env a cada ciclo para capturar mudanças sem reiniciar
         env = load_env(ENV_FILE)
-        tz = get_timezone(env)
+        tz = get_timezone()
         h1, h2 = get_schedule_hours(env)
         now = datetime.now(tz)
         current_hour = now.hour
@@ -235,7 +230,7 @@ Exemplos:
     args = parser.parse_args()
 
     env = load_env(ENV_FILE)
-    tz = get_timezone(env)
+    tz = get_timezone()
     h1, h2 = get_schedule_hours(env)
     vendors = get_configured_vendors(env)
 

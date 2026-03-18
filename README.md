@@ -2,12 +2,52 @@
 
 Sistema modular de backup automatizado de OLTs com suporte a múltiplos fabricantes. Roda em Docker com agendamento automático via scheduler Python e envia notificações e arquivos de backup diretamente ao Telegram.
 
+> **Timezone:** fixo em `America/Bahia` em todo o sistema (scheduler, Docker, sistema operacional).
+
+---
+
+## Instalação Rápida (servidor limpo)
+
+Execute o script de setup em uma linha — ele instala o Docker, configura o ambiente e clona o repositório automaticamente:
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/Br10Consultoria/bkpolts/main/setup.sh | sudo bash
+```
+
+Ou, se já tiver o repositório clonado:
+
+```bash
+sudo bash setup.sh
+```
+
+O script realiza automaticamente:
+
+| Etapa | Descrição |
+|---|---|
+| 1 | Detecta a distribuição Linux (Ubuntu, Debian, CentOS, RHEL, Rocky) |
+| 2 | Instala dependências base (`curl`, `git`, `tzdata`, `nano`) |
+| 3 | Instala Docker Engine + Docker Compose plugin (repositório oficial) |
+| 4 | Habilita e inicia o serviço Docker |
+| 5 | Adiciona o usuário atual ao grupo `docker` (sem necessidade de `sudo`) |
+| 6 | Configura timezone do sistema para `America/Bahia` |
+| 7 | Clona o repositório em `/opt/bkpolts` |
+| 8 | Cria o `.env` a partir do `.env.example` |
+| 9 | Exibe instruções finais de uso |
+
+Após o setup, edite o `.env` e suba o container:
+
+```bash
+nano /opt/bkpolts/.env
+cd /opt/bkpolts && docker compose up -d --build
+```
+
 ---
 
 ## Arquitetura
 
 ```
 bkpolts/
+├── setup.sh                # Instalação automática do Docker + ambiente
 ├── Dockerfile              # Imagem Docker (única para todos os vendors)
 ├── docker-compose.yml      # Orquestração do container
 ├── entrypoint.sh           # Inicia o scheduler.py ao subir o container
@@ -42,7 +82,7 @@ bkpolts/
 
 O `scheduler.py` é um daemon Python que:
 
-1. Lê as variáveis `VENDOR`, `CRON_HOUR_1`, `CRON_HOUR_2` e `TZ` do `.env`
+1. Lê as variáveis `VENDOR`, `CRON_HOUR_1` e `CRON_HOUR_2` do `.env`
 2. Aguarda os horários configurados (padrão: **13:00** e **22:00**)
 3. Executa automaticamente os scripts de backup dos vendors configurados
 4. **Recarrega o `.env` a cada ciclo** — mudanças de configuração não exigem reinicialização do container
@@ -54,7 +94,8 @@ O `run.py` é o CLI interativo para execução manual, com menu de seleção de 
 | `VENDOR` | Vendors a executar (vírgula) | detectado automaticamente |
 | `CRON_HOUR_1` | Primeiro horário do dia | `13` |
 | `CRON_HOUR_2` | Segundo horário do dia | `22` |
-| `TZ` | Timezone | `America/Bahia` |
+
+> **Timezone:** sempre `America/Bahia` — fixo no scheduler, Docker e sistema operacional.
 
 ---
 
@@ -71,16 +112,23 @@ O `run.py` é o CLI interativo para execução manual, com menu de seleção de 
 
 ---
 
-## Instalação
+## Instalação Manual (sem o setup.sh)
 
-### 1. Clonar o repositório
+### 1. Instalar Docker
+
+```bash
+curl -fsSL https://get.docker.com | bash
+sudo usermod -aG docker $USER
+```
+
+### 2. Clonar o repositório
 
 ```bash
 git clone https://github.com/Br10Consultoria/bkpolts.git
 cd bkpolts
 ```
 
-### 2. Configurar credenciais
+### 3. Configurar credenciais
 
 ```bash
 cp .env.example .env
@@ -96,7 +144,6 @@ VENDOR=datacom,zte
 # Horários de execução
 CRON_HOUR_1=13
 CRON_HOUR_2=22
-TZ=America/Bahia
 
 # Telegram
 TELEGRAM_TOKEN=seu_token
@@ -108,13 +155,13 @@ ZTE_OLTS=ZTE_ARAMARI:10.100.11.2:sgpoltzte:MinhaSenh@
 ZTE_TITAN_OLTS=ZTE_TITAN_CANAVIEIRAS:10.11.10.10:sgpoltzte:MinhaSenh@
 ```
 
-### 3. Subir o container
+### 4. Subir o container
 
 ```bash
 docker compose up -d --build
 ```
 
-### 4. Verificar inicialização
+### 5. Verificar inicialização
 
 ```bash
 docker logs olt-backup
@@ -130,7 +177,7 @@ Saída esperada:
 
   Vendors   : datacom,zte
   Horários  : 13:00 e 22:00
-  Timezone  : America/Bahia
+  Timezone  : America/Bahia (fixo)
 
 2026-01-01 10:00:00 | INFO | Timezone  : America/Bahia
 2026-01-01 10:00:00 | INFO | Horários  : 13:00 e 22:00

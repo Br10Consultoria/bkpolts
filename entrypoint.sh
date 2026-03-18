@@ -26,7 +26,7 @@ echo "╚═══════════════════════�
 echo ""
 echo "  Vendors   : ${VENDOR:-não definido}"
 echo "  Horários  : ${CRON_HOUR_1:-13}:00 e ${CRON_HOUR_2:-22}:00"
-echo "  Timezone  : ${TZ:-America/Bahia}"
+echo "  Timezone  : America/Bahia (fixo)"
 echo "  Iniciado  : $(date)"
 echo ""
 echo "  Para backup manual:"
