@@ -4,13 +4,13 @@ ENV TZ=America/Bahia
 ENV PYTHONUNBUFFERED=1
 ENV PYTHONPATH=/app
 
-# Pacotes do sistema: cron + timezone
+# Pacotes do sistema: tzdata (necessário para zoneinfo do Python)
 RUN apt-get update && \
-    apt-get install -y --no-install-recommends cron tzdata && \
+    apt-get install -y --no-install-recommends tzdata && \
     apt-get clean && \
     rm -rf /var/lib/apt/lists/*
 
-# Timezone
+# Timezone do sistema
 RUN ln -snf /usr/share/zoneinfo/$TZ /etc/localtime && echo $TZ > /etc/timezone
 
 WORKDIR /app
@@ -26,6 +26,6 @@ COPY . /app
 RUN mkdir -p /app/logs /app/backups
 
 # Permissões
-RUN chmod +x /app/entrypoint.sh
+RUN chmod +x /app/entrypoint.sh /app/run.py /app/scheduler.py
 
 ENTRYPOINT ["/app/entrypoint.sh"]

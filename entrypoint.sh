@@ -4,57 +4,36 @@ set -e
 # ============================================================
 # Entrypoint universal — multi-vendor OLT Backup
 #
-# A variável VENDOR (definida no .env) controla quais scripts
-# serão agendados no cron. Aceita um ou mais vendors separados
-# por vírgula. Exemplo: VENDOR=datacom,zte,parks
+# Inicia o scheduler.py (daemon Python) que:
+#   - Lê VENDOR, CRON_HOUR_1, CRON_HOUR_2 e TZ do .env
+#   - Executa os backups dos vendors configurados às horas definidas
+#   - Recarrega o .env a cada ciclo (sem precisar reiniciar o container)
+#
+# Para execução manual dentro do container:
+#   python3 /app/run.py              # menu interativo
+#   python3 /app/run.py --vendor zte # vendor específico
+#   python3 /app/scheduler.py --now  # todos os vendors imediatamente
 # ============================================================
 
-# Exporta variáveis de ambiente para o cron poder ler
-printenv | grep -v "no_proxy" > /etc/environment
-
-# Horários do cron (podem ser sobrescritos via .env)
-CRON_H1="${CRON_HOUR_1:-13}"
-CRON_H2="${CRON_HOUR_2:-22}"
-
-# Gera o crontab dinamicamente com base nos vendors selecionados
-CRON_FILE="/etc/cron.d/olt-backup"
-echo "SHELL=/bin/bash" > "$CRON_FILE"
-echo "PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin" >> "$CRON_FILE"
-echo "" >> "$CRON_FILE"
-
-IFS=',' read -ra VENDORS <<< "${VENDOR:-datacom}"
-
-for V in "${VENDORS[@]}"; do
-    V=$(echo "$V" | xargs)  # trim espaços
-    SCRIPT="/app/vendors/${V}/backup.py"
-
-    if [ -f "$SCRIPT" ]; then
-        echo "0 ${CRON_H1} * * * root cd /app && /usr/local/bin/python3 ${SCRIPT} >> /app/logs/backup_${V}.log 2>&1" >> "$CRON_FILE"
-        echo "0 ${CRON_H2} * * * root cd /app && /usr/local/bin/python3 ${SCRIPT} >> /app/logs/backup_${V}.log 2>&1" >> "$CRON_FILE"
-        echo "[OK] Vendor '${V}' agendado às ${CRON_H1}:00 e ${CRON_H2}:00"
-    else
-        echo "[ERRO] Script não encontrado: ${SCRIPT}"
-    fi
-done
-
-# Linha em branco obrigatória para cron
-echo "" >> "$CRON_FILE"
-
-chmod 0644 "$CRON_FILE"
-crontab "$CRON_FILE"
-
-# Cria diretórios
+# Cria diretórios necessários
 mkdir -p /app/logs /app/backups
 
-# Cria log
-touch /var/log/cron.log
+# Exibe banner de inicialização
+echo "╔══════════════════════════════════════════════════════╗"
+echo "║         OLT Backup Docker — Multi-Vendor            ║"
+echo "║         Br10 Consultoria                            ║"
+echo "╚══════════════════════════════════════════════════════╝"
+echo ""
+echo "  Vendors   : ${VENDOR:-não definido}"
+echo "  Horários  : ${CRON_HOUR_1:-13}:00 e ${CRON_HOUR_2:-22}:00"
+echo "  Timezone  : ${TZ:-America/Bahia}"
+echo "  Iniciado  : $(date)"
+echo ""
+echo "  Para backup manual:"
+echo "    docker exec olt-backup python3 /app/run.py"
+echo "    docker exec olt-backup python3 /app/run.py --vendor zte"
+echo "    docker exec olt-backup python3 /app/scheduler.py --now"
+echo ""
 
-echo "============================================="
-echo "  OLT Backup Docker — Multi-Vendor"
-echo "  Vendors: ${VENDOR:-datacom}"
-echo "  Horários: ${CRON_H1}:00 e ${CRON_H2}:00 (${TZ})"
-echo "  $(date)"
-echo "============================================="
-
-# Inicia o cron em foreground
-exec cron -f
+# Inicia o scheduler Python em foreground
+exec python3 /app/scheduler.py
