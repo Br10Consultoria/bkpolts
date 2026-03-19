@@ -1,17 +1,15 @@
 #!/usr/bin/env python3
 """Backup de OLTs Huawei — Telnet + FTP
 
-Fluxo por OLT (baseado na sessão real):
+Fluxo por OLT:
   1. Conecta via Telnet, aguarda "username:"
   2. Envia usuário, aguarda "password:", envia senha
-  3. Aguarda prompt "#" (já entra direto no modo privilegiado)
-  4. Monta o nome do arquivo: backupolt<NOME><DDMMYY>.cfg
-  5. Executa o comando de backup:
-       backup configuration ftp <FTP_IP> <FILENAME>
-  6. Aguarda prompt de confirmação "(y/n)" e envia "y"
-  7. Aguarda 30s para o upload FTP concluir na OLT
-  8. Envia "quit" e fecha a sessão
-  9. Baixa o arquivo do FTP e envia ao Telegram
+  3. Envia "enable", aguarda prompt "#"
+  4. Executa: backup configuration ftp <FTP_IP> <FILENAME>
+  5. Aguarda "Are you sure to continue? (y/n)" e envia "y"
+  6. Aguarda 30s para o upload FTP concluir na OLT
+  7. Envia "exit" e fecha a sessão
+  8. Baixa o arquivo do FTP e envia ao Telegram
 
 Variáveis de ambiente necessárias:
   HUAWEI_OLTS  — formato NOME:IP:USER:PASS separados por vírgula
@@ -36,21 +34,7 @@ FTP_IP       = os.getenv("FTP_IP", "")
 FTP_USER     = os.getenv("FTP_USER", "")
 FTP_PASSWORD = os.getenv("FTP_PASSWORD", "")
 
-TIMEOUT      = 20   # timeout geral de leitura de prompts (segundos)
 UPLOAD_WAIT  = 30   # segundos aguardando o upload FTP concluir na OLT
-
-
-def write(tn: telnetlib.Telnet, cmd: str):
-    """Envia um comando + newline e loga."""
-    log.info("CMD >> %s", cmd if "password" not in cmd.lower() else "****")
-    tn.write(cmd.encode("ascii") + b"\n")
-
-
-def read_until(tn: telnetlib.Telnet, expected: bytes, timeout: int = TIMEOUT) -> str:
-    """Aguarda um prompt e retorna o texto recebido."""
-    data = tn.read_until(expected, timeout=timeout).decode("ascii", errors="ignore")
-    log.info("RESP << %s", data.strip()[:300])
-    return data
 
 
 def backup_huawei(olt: dict, progresso: str) -> bool:
@@ -63,37 +47,39 @@ def backup_huawei(olt: dict, progresso: str) -> bool:
     log.info("===== INÍCIO BACKUP HUAWEI %s (%s) =====", name, ip)
 
     try:
-        tn = telnetlib.Telnet(ip, 23, timeout=TIMEOUT)
+        tn = telnetlib.Telnet(ip, 23, timeout=20)
 
         # ── Login ──────────────────────────────────────────────────
-        # Huawei: "username:" (case insensitive, pode vir como "User name:")
-        data = tn.read_until(b":", timeout=TIMEOUT).decode("ascii", errors="ignore")
-        log.info("RESP << %s", data.strip()[:200])
-        write(tn, user)
+        tn.read_until(b"username:", timeout=10)
+        tn.write(user.encode("ascii") + b"\n")
+        log.info("CMD >> %s", user)
 
-        read_until(tn, b"password:")
-        write(tn, password)
+        tn.read_until(b"password:", timeout=10)
+        tn.write(password.encode("ascii") + b"\n")
+        log.info("CMD >> ****")
 
-        # ── Aguarda prompt # (modo privilegiado direto) ────────────
-        # Huawei entra direto no modo Admin após login, sem "enable" extra
-        read_until(tn, b"#")
+        # ── Modo privilegiado ──────────────────────────────────────
+        tn.write(b"enable\n")
+        log.info("CMD >> enable")
+        tn.read_until(b"#", timeout=10)
 
         # ── Monta nome do arquivo ──────────────────────────────────
-        # Formato: backupolt<NOME><DDMMYY>.cfg  ex: backupoltcosme190326.cfg
-        ts_file = datetime.now().strftime("%d%m%y")
-        nome_lower = name.lower()
-        ftp_filename = f"backupolt{nome_lower}{ts_file}.cfg"
+        # Formato: backupolt<NOME><DDMMYYYY>_<HHMMSS>.cfg
+        current_date_time = datetime.now().strftime("%d%m%Y_%H%M%S")
+        ftp_filename = f"backupolt_{name}_{current_date_time}.cfg"
 
         # ── Executa backup configuration ftp ──────────────────────
-        # Comando: backup configuration ftp <IP> <FILENAME>
-        # (sem usuário/senha no comando — a OLT usa as credenciais FTP
-        #  configuradas internamente ou aceita anônimo conforme o modelo)
-        backup_cmd = f"backup configuration ftp {FTP_IP} {ftp_filename}"
-        write(tn, backup_cmd)
+        backup_command = f"backup configuration ftp {FTP_IP} {ftp_filename}"
+        log.info("CMD >> %s", backup_command)
+        tn.write(backup_command.encode("ascii") + b"\n")
+        time.sleep(2)
+        tn.read_very_eager()  # limpa buffer
 
-        # ── Aguarda confirmação "(y/n)" e confirma com "y" ─────────
-        resp = read_until(tn, b"(y/n)", timeout=TIMEOUT)
-        write(tn, "y")
+        # ── Confirmação ────────────────────────────────────────────
+        tn.write(b"\n")
+        tn.read_until(b"Are you sure to continue? (y/n)", timeout=10)
+        tn.write(b"y\n")
+        log.info("CMD >> y")
 
         # ── Aguarda conclusão do upload na OLT ─────────────────────
         log.info("Aguardando %ds para upload FTP concluir...", UPLOAD_WAIT)
@@ -105,7 +91,7 @@ def backup_huawei(olt: dict, progresso: str) -> bool:
             log.info("RESP << %s", resp.strip()[:300])
 
         # ── Encerra sessão ─────────────────────────────────────────
-        write(tn, "quit")
+        tn.write(b"exit\n")
         tn.close()
 
         # ── Baixa do FTP e envia ao Telegram ───────────────────────
