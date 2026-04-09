@@ -23,19 +23,21 @@ ENV_FILE = BASE_DIR / ".env"
 
 # Mapeamento de vendor → variáveis de OLT no .env
 VENDOR_MAP = {
-    "datacom":   ["DATACOM_OLTS"],
-    "zte":       ["ZTE_OLTS", "ZTE_TITAN_OLTS"],
-    "parks":     ["PARKS_OLTS"],
-    "fiberhome": ["FIBERHOME_OLTS"],
-    "huawei":    ["HUAWEI_OLTS"],
+    "datacom":       ["DATACOM_OLTS"],
+    "zte":           ["ZTE_OLTS", "ZTE_TITAN_OLTS"],
+    "parks":         ["PARKS_OLTS"],
+    "fiberhome":     ["FIBERHOME_OLTS"],
+    "huawei":        ["HUAWEI_OLTS"],
+    "intelbras_g16": ["INTELBRAS_G16_OLTS"],
 }
 
 VENDOR_LABELS = {
-    "datacom":   "Datacom   (Telnet + TFTP)",
-    "zte":       "ZTE       (Telnet + FTP)  — padrão + Titan",
-    "parks":     "Parks     (Telnet + FTP)",
-    "fiberhome": "Fiberhome (Telnet + FTP)",
-    "huawei":    "Huawei    (Telnet + FTP)",
+    "datacom":       "Datacom        (Telnet + TFTP)",
+    "zte":           "ZTE            (Telnet + FTP)  — padrão + Titan",
+    "parks":         "Parks          (Telnet + FTP)",
+    "fiberhome":     "Fiberhome      (Telnet + FTP)",
+    "huawei":        "Huawei         (Telnet + FTP)",
+    "intelbras_g16": "Intelbras G16  (Telnet + FTP/TFTP)",
 }
 
 

@@ -32,11 +32,12 @@ LOG_FILE = BASE_DIR / "logs" / "scheduler.log"
 
 # Mapeamento de vendor → variáveis de OLT no .env
 VENDOR_MAP = {
-    "datacom":   ["DATACOM_OLTS"],
-    "zte":       ["ZTE_OLTS", "ZTE_TITAN_OLTS"],
-    "parks":     ["PARKS_OLTS"],
-    "fiberhome": ["FIBERHOME_OLTS"],
-    "huawei":    ["HUAWEI_OLTS"],
+    "datacom":       ["DATACOM_OLTS"],
+    "zte":           ["ZTE_OLTS", "ZTE_TITAN_OLTS"],
+    "parks":         ["PARKS_OLTS"],
+    "fiberhome":     ["FIBERHOME_OLTS"],
+    "huawei":        ["HUAWEI_OLTS"],
+    "intelbras_g16": ["INTELBRAS_G16_OLTS"],
 }
 
 # ============================================================

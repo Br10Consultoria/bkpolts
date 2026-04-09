@@ -176,6 +176,45 @@ VENDORS = {
             "exemplo": "HW_OLT1:10.10.10.70:admin:senha123",
         },
     },
+    "intelbras_g16": {
+        "label":    "Intelbras G16",
+        "protocol": "Telnet + FTP/TFTP",
+        "descricao": "OLTs Intelbras G16 (prompt GPON#)",
+        "campos_gerais": [
+            {
+                "var":     "INTELBRAS_BACKUP_METHOD",
+                "desc":    "Método de backup: ftp, tftp ou local",
+                "exemplo": "ftp",
+            },
+            {
+                "var":     "FTP_IP",
+                "desc":    "IP do servidor FTP (para método ftp)",
+                "exemplo": "192.168.1.100",
+            },
+            {
+                "var":     "FTP_USER",
+                "desc":    "Usuário do FTP",
+                "exemplo": "ftpuser",
+            },
+            {
+                "var":     "FTP_PASSWORD",
+                "desc":    "Senha do FTP",
+                "exemplo": "ftppass",
+                "senha":   True,
+            },
+            {
+                "var":     "TFTP_IP",
+                "desc":    "IP do servidor TFTP (para método tftp)",
+                "exemplo": "192.168.1.100",
+            },
+        ],
+        "campo_olts": {
+            "var":     "INTELBRAS_G16_OLTS",
+            "desc":    "OLTs Intelbras G16",
+            "formato": "NOME:IP:USUARIO:SENHA",
+            "exemplo": "G16_OLT1:10.10.10.80:admin:senha123",
+        },
+    },
 }
 
 # ============================================================
