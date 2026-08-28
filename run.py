@@ -32,7 +32,7 @@ VENDOR_MAP = {
 }
 
 VENDOR_LABELS = {
-    "datacom":       "Datacom        (Telnet + TFTP)",
+    "datacom":       "Datacom        (Telnet + SFTP/SCP)",
     "zte":           "ZTE            (Telnet + FTP)  — padrão + Titan",
     "parks":         "Parks          (Telnet + FTP)",
     "fiberhome":     "Fiberhome      (Telnet + FTP)",

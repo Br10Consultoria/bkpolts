@@ -65,7 +65,7 @@ bkpolts/
 │
 └── vendors/                # Um diretório por fabricante
     ├── datacom/
-    │   └── backup.py       # Datacom — Telnet + TFTP
+    │   └── backup.py       # Datacom — Telnet + SFTP/SCP
     ├── zte/
     │   └── backup.py       # ZTE padrão + ZTE Titan — Telnet + FTP
     ├── parks/
@@ -103,12 +103,68 @@ O `run.py` é o CLI interativo para execução manual, com menu de seleção de 
 
 | Vendor | Protocolo de acesso | Protocolo de transferência |
 |---|---|---|
-| **Datacom** | Telnet | TFTP |
+| **Datacom** | Telnet | SFTP/SCP (`DATACOM_COPY_SCHEME`) |
 | **ZTE** | Telnet | FTP |
 | **ZTE Titan** | Telnet | FTP |
 | **Parks** | Telnet | FTP |
 | **Fiberhome** | Telnet | FTP |
 | **Huawei** | Telnet | FTP |
+
+---
+
+## Servidor de backup Datacom (SFTP/SCP)
+
+O backup Datacom não depende mais de um servidor TFTP (que nunca chegou a existir neste projeto — era a causa dos backups "enviados mas nunca recebidos"). Em vez disso, a própria OLT envia o arquivo via SFTP/SCP para um usuário SSH dedicado e restrito (chroot) no host Debian/Ubuntu que roda o Docker. Como o `sshd` já vem instalado por padrão em qualquer distro dessas, não é preciso instalar nada além do OpenSSH.
+
+> **Antes de tudo:** conecte via telnet numa OLT, entre em `config` e rode `copy ?` para confirmar se o firmware aceita `sftp://` ou `scp://` como destino. Ajuste `DATACOM_COPY_SCHEME` no `.env` conforme o resultado — o código não precisa mudar.
+
+### 1. Criar o usuário dedicado no host (fora do container)
+
+```bash
+sudo mkdir -p /srv/olt-backups/upload
+sudo adduser --disabled-password --gecos "" --home /srv/olt-backups oltbackup
+sudo passwd oltbackup                       # defina a senha usada em DATACOM_BACKUP_PASSWORD
+sudo chown root:root /srv/olt-backups       # exigido pelo sshd: raiz do chroot não pode ser gravável pelo usuário
+sudo chmod 755 /srv/olt-backups
+sudo chown oltbackup:oltbackup /srv/olt-backups/upload
+sudo chmod 700 /srv/olt-backups/upload
+```
+
+### 2. Restringir o usuário a SFTP com chroot (`/etc/ssh/sshd_config`)
+
+```
+Match User oltbackup
+    ChrootDirectory /srv/olt-backups
+    ForceCommand internal-sftp
+    PasswordAuthentication yes
+    AllowTcpForwarding no
+    X11Forwarding no
+```
+
+```bash
+sudo systemctl restart sshd
+```
+
+Se o firmware da OLT só aceitar `scp://` (protocolo SCP puro, não SFTP), o `ForceCommand internal-sftp` acima não serve — troque por `ForceCommand /usr/lib/openssh/sftp-server` **ou**, se realmente for SCP raiz, remova o `ForceCommand` e restrinja via `scp` no lugar de um shell completo (ex.: `usermod -s /usr/bin/scp oltbackup` não é suportado diretamente; nesse caso use `rssh` ou `scponly`). Isso só é necessário se o `copy ?` confirmar que a OLT fala SCP e não SFTP.
+
+### 3. Apontar o `.env` para esse usuário e diretório
+
+```env
+DATACOM_BACKUP_HOST=10.0.0.1            # IP do host onde o sshd está rodando
+DATACOM_BACKUP_USER=oltbackup
+DATACOM_BACKUP_PASSWORD=SENHA_FORTE_AQUI
+DATACOM_BACKUP_PATH=                    # vazio = grava direto em /srv/olt-backups/upload
+DATACOM_COPY_SCHEME=sftp                # ou "scp", conforme confirmado no `copy ?`
+DATACOM_BACKUP_SFTP_DIR=/srv/olt-backups/upload
+```
+
+`DATACOM_BACKUP_SFTP_DIR` faz o `docker-compose.yml` montar exatamente essa pasta do host como `/app/backups` dentro do container — é assim que o script Python enxerga o arquivo que a OLT acabou de enviar via SFTP, sem precisar de nenhuma outra ponte entre host e container.
+
+### 4. Recriar o container para aplicar o bind mount
+
+```bash
+docker compose up -d --build
+```
 
 ---
 
@@ -208,7 +264,7 @@ Saída do menu:
 
   Vendors disponíveis (com OLTs configuradas no .env):
 
-  [1] Datacom   (Telnet + TFTP)                       ✔  2 OLT(s)
+  [1] Datacom   (Telnet + SFTP/SCP)                    ✔  2 OLT(s)
   [2] ZTE       (Telnet + FTP)  — padrão + Titan      ✔  2 OLT(s)
   [3] Parks     (Telnet + FTP)                        ✘  sem OLTs configuradas
   [4] Fiberhome (Telnet + FTP)                        ✘  sem OLTs configuradas

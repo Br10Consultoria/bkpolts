@@ -9,7 +9,7 @@ services:
       - .env
     volumes:
       - .:/app                           # raiz do projeto — git pull reflete imediatamente
-      - backup-data:/app/backups         # arquivos de backup temporários (volume persistente)
+      - ${DATACOM_BACKUP_SFTP_DIR:-backup-data}:/app/backups  # ver README (Servidor de backup Datacom)
       - backup-logs:/app/logs            # logs de execução (volume persistente)
       - /etc/localtime:/etc/localtime:ro
     environment:
