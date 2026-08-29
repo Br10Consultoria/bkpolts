@@ -48,8 +48,9 @@ cd /opt/bkpolts && docker compose up -d --build
 ```
 bkpolts/
 ├── setup.sh                # Instalação automática do Docker + ambiente
-├── Dockerfile              # Imagem Docker (única para todos os vendors)
-├── docker-compose.yml      # Orquestração do container
+├── setup_datacom_sftp.sh   # Cria o usuário SFTP/chroot de backup Datacom (sudo, uma vez)
+├── Dockerfile              # Imagem Docker (única para todos os vendors + webui)
+├── docker-compose.yml      # Orquestração dos containers (olt-backup + webui)
 ├── entrypoint.sh           # Inicia o scheduler.py ao subir o container
 ├── run.py                  # CLI interativo para backup manual
 ├── scheduler.py            # Daemon de agendamento (13h e 22h)
@@ -61,7 +62,12 @@ bkpolts/
 │   ├── __init__.py
 │   ├── telegram.py         # Envio de mensagens e arquivos ao Telegram
 │   ├── helpers.py          # Logging, Telnet, FTP download, cleanup
-│   └── parser.py           # Parser de OLTs a partir do .env
+│   ├── parser.py           # Parser de OLTs a partir do .env
+│   └── env_store.py        # Leitura/escrita do .env usada pela interface web
+│
+├── webui/                  # Interface web (cadastro de OLTs + backup manual)
+│   ├── app.py               # App Flask (login, rotas, disparo de backup)
+│   └── templates/
 │
 └── vendors/                # Um diretório por fabricante
     ├── datacom/
@@ -118,19 +124,19 @@ O backup Datacom não depende mais de um servidor TFTP (que nunca chegou a exist
 
 > **Antes de tudo:** conecte via telnet numa OLT, entre em `config` e rode `copy ?` para confirmar se o firmware aceita `sftp://` ou `scp://` como destino. Ajuste `DATACOM_COPY_SCHEME` no `.env` conforme o resultado — o código não precisa mudar.
 
-### 1. Criar o usuário dedicado no host (fora do container)
+### 1. Criar o usuário dedicado no host (script automático)
+
+Esse passo precisa de root pra criar usuário de sistema e editar o `sshd_config` — por isso é um script que você roda uma vez no host, não algo que a interface web faz (ver seção "Interface Web" abaixo, sobre por quê).
 
 ```bash
-sudo mkdir -p /srv/olt-backups/upload
-sudo adduser --disabled-password --gecos "" --home /srv/olt-backups oltbackup
-sudo passwd oltbackup                       # defina a senha usada em DATACOM_BACKUP_PASSWORD
-sudo chown root:root /srv/olt-backups       # exigido pelo sshd: raiz do chroot não pode ser gravável pelo usuário
-sudo chmod 755 /srv/olt-backups
-sudo chown oltbackup:oltbackup /srv/olt-backups/upload
-sudo chmod 700 /srv/olt-backups/upload
+sudo bash setup_datacom_sftp.sh
+# ou, com usuário/diretório customizados:
+sudo bash setup_datacom_sftp.sh --user oltbackup --dir /srv/olt-backups
 ```
 
-### 2. Restringir o usuário a SFTP com chroot (`/etc/ssh/sshd_config`)
+O script cria o usuário, ajusta permissões do chroot, pede a senha, adiciona o bloco `Match User` no `/etc/ssh/sshd_config` (validando a sintaxe antes de aplicar, pra não derrubar o SSH da máquina) e reinicia o `sshd`. É idempotente — pode rodar de novo pra trocar a senha ou reaplicar a configuração.
+
+Se preferir fazer manualmente, ou se o `copy ?` da OLT mostrar que o firmware fala SCP puro (não SFTP), o bloco que o script gera é:
 
 ```
 Match User oltbackup
@@ -141,13 +147,9 @@ Match User oltbackup
     X11Forwarding no
 ```
 
-```bash
-sudo systemctl restart sshd
-```
+Para SCP puro, troque `ForceCommand internal-sftp` por `ForceCommand /usr/lib/openssh/sftp-server`, ou restrinja o shell do usuário com `rssh`/`scponly` em vez de um `Match User` — ajuste manual, não coberto pelo script.
 
-Se o firmware da OLT só aceitar `scp://` (protocolo SCP puro, não SFTP), o `ForceCommand internal-sftp` acima não serve — troque por `ForceCommand /usr/lib/openssh/sftp-server` **ou**, se realmente for SCP raiz, remova o `ForceCommand` e restrinja via `scp` no lugar de um shell completo (ex.: `usermod -s /usr/bin/scp oltbackup` não é suportado diretamente; nesse caso use `rssh` ou `scponly`). Isso só é necessário se o `copy ?` confirmar que a OLT fala SCP e não SFTP.
-
-### 3. Apontar o `.env` para esse usuário e diretório
+### 2. Apontar o `.env` (ou a interface web, em Configurações) para esse usuário
 
 ```env
 DATACOM_BACKUP_HOST=10.0.0.1            # IP do host onde o sshd está rodando
@@ -160,11 +162,29 @@ DATACOM_BACKUP_SFTP_DIR=/srv/olt-backups/upload
 
 `DATACOM_BACKUP_SFTP_DIR` faz o `docker-compose.yml` montar exatamente essa pasta do host como `/app/backups` dentro do container — é assim que o script Python enxerga o arquivo que a OLT acabou de enviar via SFTP, sem precisar de nenhuma outra ponte entre host e container.
 
-### 4. Recriar o container para aplicar o bind mount
+### 3. Recriar os containers para aplicar o bind mount
 
 ```bash
 docker compose up -d --build
 ```
+
+---
+
+## Interface Web
+
+`docker compose up -d --build` sobe dois serviços: `olt-backup` (o `scheduler.py`, que dispara os backups agendados) e `webui` (painel para cadastrar OLTs e rodar backups manualmente), escutando em `http://<ip-do-servidor>:8080` (porta configurável em `WEBUI_PORT`).
+
+Login: usuário/senha definidos em `WEBUI_USER` / `WEBUI_PASSWORD` no `.env`. **Não exponha essa porta na internet** mesmo com login habilitado — mantenha atrás de VPN/firewall, como já se faz hoje com o acesso Telnet às próprias OLTs.
+
+O que dá pra fazer pelo painel:
+- Cadastrar, listar e remover OLTs por vendor (grava direto no `.env`, mesmo formato `NOME:IP:USUARIO:SENHA` usado pelo resto do projeto).
+- Disparar o backup de uma OLT específica ou de todas as OLTs de um vendor, sem esperar o horário agendado.
+- Acompanhar o log da última execução de cada vendor.
+- Editar Telegram e as configurações de backup Datacom (host/usuário/senha/esquema SFTP-SCP).
+
+O que **não** é feito pelo painel, de propósito: criar o usuário SSH/chroot do host e editar o `sshd_config` (isso é o `setup_datacom_sftp.sh`, rodado manualmente com sudo — ver seção acima). Um app web com permissão de root pra mexer em usuários do sistema e no SSH é um risco desproporcional ao benefício: se alguém contornar o login do painel, ganharia root na máquina. Cadastro de OLT e disparo de backup não têm esse risco (na pior hipótese, alguém logado no painel vê/edita credenciais que já estão em texto puro no `.env` mesmo).
+
+Se quiser rodar sem Docker (ex.: pra debugar): `python3 webui/app.py` (lê o `.env` da raiz do projeto).
 
 ---
 

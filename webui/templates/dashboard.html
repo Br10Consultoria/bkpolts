@@ -1,0 +1,30 @@
+{% extends "base.html" %}
+{% block title %}Painel{% endblock %}
+{% block content %}
+<h1>Vendors</h1>
+{% if not telegram_ok %}
+<div class="flash error">Telegram não configurado — vá em <a href="{{ url_for('settings') }}">Configurações</a> antes de rodar um backup.</div>
+{% endif %}
+
+<div class="card">
+  <table>
+    <tr><th>Vendor</th><th>OLTs</th><th>Status</th><th></th></tr>
+    {% for v in vendors %}
+    <tr>
+      <td>{{ v.label }}</td>
+      <td>{{ v.count }}</td>
+      <td>
+        {% if v.running %}
+          <span class="badge warn">rodando…</span>
+        {% elif v.count > 0 %}
+          <span class="badge ok">pronto</span>
+        {% else %}
+          <span class="muted">sem OLTs</span>
+        {% endif %}
+      </td>
+      <td><a class="btn secondary" href="{{ url_for('vendor_page', vendor=v.key) }}">Gerenciar</a></td>
+    </tr>
+    {% endfor %}
+  </table>
+</div>
+{% endblock %}

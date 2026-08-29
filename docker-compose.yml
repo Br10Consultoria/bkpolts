@@ -16,6 +16,24 @@ services:
       - TZ=America/Bahia
     network_mode: host                   # acesso à rede local das OLTs
 
+  webui:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: olt-backup-webui
+    entrypoint: ["python3", "/app/webui/app.py"]
+    restart: unless-stopped
+    env_file:
+      - .env
+    volumes:
+      - .:/app
+      - ${DATACOM_BACKUP_SFTP_DIR:-backup-data}:/app/backups  # mesmo volume do olt-backup
+      - backup-logs:/app/logs
+      - /etc/localtime:/etc/localtime:ro
+    environment:
+      - TZ=America/Bahia
+    network_mode: host                   # o botão "backup agora" precisa alcançar as OLTs
+
 volumes:
   backup-data:
     driver: local

@@ -1,0 +1,71 @@
+{% extends "base.html" %}
+{% block title %}{{ label }}{% endblock %}
+{% block extra_head %}{% if vendor_running %}<meta http-equiv="refresh" content="5">{% endif %}{% endblock %}
+{% block content %}
+<p><a class="muted" href="{{ url_for('dashboard') }}">&larr; voltar</a></p>
+<h1>{{ label }}</h1>
+
+<div class="card">
+  <h2>Backup</h2>
+  <form method="post" action="{{ url_for('vendor_backup', vendor=vendor) }}">
+    <input type="hidden" name="csrf" value="{{ csrf }}">
+    {% if vendor_running %}
+      <span class="badge warn">Rodando…</span> a página atualiza sozinha a cada 5s.
+    {% else %}
+      <button type="submit">Rodar backup de todas as OLTs deste vendor agora</button>
+    {% endif %}
+  </form>
+</div>
+
+{% for group in groups %}
+<div class="card">
+  <h2>{{ group.label }} <span class="muted">({{ group.olts|length }} OLT(s))</span></h2>
+  <table>
+    <tr><th>Nome</th><th>IP</th><th>Usuário</th><th>Status</th><th></th></tr>
+    {% for olt in group.olts %}
+    <tr>
+      <td>{{ olt.name }}</td>
+      <td>{{ olt.ip }}</td>
+      <td>{{ olt.user }}</td>
+      <td>
+        {% if olt.running %}<span class="badge warn">rodando…</span>{% endif %}
+      </td>
+      <td style="white-space:nowrap;">
+        <form method="post" action="{{ url_for('vendor_backup', vendor=vendor) }}" style="display:inline;">
+          <input type="hidden" name="csrf" value="{{ csrf }}">
+          <input type="hidden" name="olt_name" value="{{ olt.name }}">
+          <button type="submit" class="secondary" {% if olt.running %}disabled{% endif %}>Backup agora</button>
+        </form>
+        <form method="post" action="{{ url_for('vendor_delete', vendor=vendor, name=olt.name) }}" style="display:inline;" onsubmit="return confirm('Remover OLT {{ olt.name }}?');">
+          <input type="hidden" name="csrf" value="{{ csrf }}">
+          <input type="hidden" name="list_var" value="{{ group.var }}">
+          <button type="submit" class="danger">Remover</button>
+        </form>
+      </td>
+    </tr>
+    {% else %}
+    <tr><td colspan="5" class="muted">Nenhuma OLT cadastrada.</td></tr>
+    {% endfor %}
+  </table>
+
+  <h2 style="margin-top:20px;">Adicionar OLT — {{ group.label }}</h2>
+  <form method="post" action="{{ url_for('vendor_add', vendor=vendor) }}">
+    <input type="hidden" name="csrf" value="{{ csrf }}">
+    <input type="hidden" name="list_var" value="{{ group.var }}">
+    <div class="row">
+      <div><label>Nome</label><input type="text" name="name" placeholder="OLT_EXEMPLO" required></div>
+      <div><label>IP</label><input type="text" name="ip" placeholder="10.10.10.10" required></div>
+      <div><label>Usuário</label><input type="text" name="user" placeholder="admin" required></div>
+      <div><label>Senha</label><input type="password" name="password" required></div>
+      <div style="flex:0;"><button type="submit">Adicionar</button></div>
+    </div>
+  </form>
+</div>
+{% endfor %}
+
+<div class="card">
+  <h2>Log recente</h2>
+  <pre class="log">{{ log_text }}</pre>
+  <a class="muted" href="{{ url_for('vendor_page', vendor=vendor) }}">atualizar</a>
+</div>
+{% endblock %}

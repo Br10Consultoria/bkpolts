@@ -45,5 +45,10 @@ def parse_olts(env_var: str) -> list[dict]:
             "password": password,
         })
 
+    only = os.getenv("OLT_ONLY", "").strip()
+    if only:
+        olts = [o for o in olts if o["name"] == only]
+        log.info("OLT_ONLY=%s definido — filtrando para %d OLT(s)", only, len(olts))
+
     log.info("Parsed %d OLT(s) de %s", len(olts), env_var)
     return olts

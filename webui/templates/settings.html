@@ -1,0 +1,45 @@
+{% extends "base.html" %}
+{% block title %}Configurações{% endblock %}
+{% block content %}
+<p><a class="muted" href="{{ url_for('dashboard') }}">&larr; voltar</a></p>
+<h1>Configurações</h1>
+
+<form method="post">
+<input type="hidden" name="csrf" value="{{ csrf }}">
+
+<div class="card">
+  <h2>Telegram</h2>
+  <label>Token do bot</label>
+  <input type="text" name="telegram_token" value="{{ env.get('TELEGRAM_TOKEN', '') }}">
+  <label>Chat ID</label>
+  <input type="text" name="telegram_chat_id" value="{{ env.get('TELEGRAM_CHAT_ID', '') }}">
+</div>
+
+<div class="card">
+  <h2>Servidor de backup Datacom (SFTP/SCP)</h2>
+  <p class="muted">O usuário SSH/chroot precisa ser criado no host antes (script setup_datacom_sftp.sh).</p>
+  <div class="row">
+    <div><label>Host (IP deste servidor)</label><input type="text" name="datacom_backup_host" value="{{ env.get('DATACOM_BACKUP_HOST', '') }}"></div>
+    <div><label>Usuário SFTP/SCP</label><input type="text" name="datacom_backup_user" value="{{ env.get('DATACOM_BACKUP_USER', '') }}"></div>
+  </div>
+  <label>Nova senha do usuário SFTP/SCP (deixe em branco para manter a atual)</label>
+  <input type="password" name="datacom_backup_password">
+  <div class="row">
+    <div><label>Caminho remoto (vazio = raiz do chroot)</label><input type="text" name="datacom_backup_path" value="{{ env.get('DATACOM_BACKUP_PATH', '') }}"></div>
+    <div><label>Esquema (`copy ?` na OLT)</label><input type="text" name="datacom_copy_scheme" value="{{ env.get('DATACOM_COPY_SCHEME', 'sftp') }}"></div>
+  </div>
+  <label>Diretório no host (bind mount de /app/backups)</label>
+  <input type="text" name="datacom_backup_sftp_dir" value="{{ env.get('DATACOM_BACKUP_SFTP_DIR', '') }}">
+</div>
+
+<div class="card">
+  <h2>Senha do painel</h2>
+  <label>Senha atual</label>
+  <input type="password" name="current_webui_password">
+  <label>Nova senha (deixe em branco para manter a atual)</label>
+  <input type="password" name="new_webui_password">
+</div>
+
+<button type="submit">Salvar</button>
+</form>
+{% endblock %}
