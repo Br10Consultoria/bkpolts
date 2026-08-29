@@ -102,13 +102,39 @@ VENDORS = {
     },
     "datacom": {
         "label":    "Datacom",
-        "protocol": "Telnet + TFTP",
-        "descricao": "OLTs Datacom (DM4610, DM4612, etc.)",
+        "protocol": "Telnet + SFTP/SCP",
+        "descricao": "OLTs Datacom (DM4610, DM4615, DM4618, etc.)",
         "campos_gerais": [
             {
-                "var":     "TFTP_IP",
-                "desc":    "IP do servidor TFTP (onde a OLT vai enviar o backup)",
+                "var":     "DATACOM_BACKUP_HOST",
+                "desc":    "IP deste servidor (onde a OLT vai enviar o backup via SFTP/SCP)",
                 "exemplo": "192.168.1.100",
+            },
+            {
+                "var":     "DATACOM_BACKUP_USER",
+                "desc":    "Usuário SFTP/SCP dedicado (chroot) criado neste servidor",
+                "exemplo": "oltbackup",
+            },
+            {
+                "var":     "DATACOM_BACKUP_PASSWORD",
+                "desc":    "Senha desse usuário",
+                "exemplo": "SenhaForte123",
+                "senha":   True,
+            },
+            {
+                "var":     "DATACOM_BACKUP_PATH",
+                "desc":    "Caminho remoto relativo à raiz do chroot (em branco = raiz)",
+                "exemplo": "",
+            },
+            {
+                "var":     "DATACOM_COPY_SCHEME",
+                "desc":    "Esquema aceito pela OLT no comando `copy ?`: sftp ou scp",
+                "exemplo": "sftp",
+            },
+            {
+                "var":     "DATACOM_BACKUP_SFTP_DIR",
+                "desc":    "Pasta no host igual à pasta de upload do usuário acima (bind mount de /app/backups)",
+                "exemplo": "/srv/olt-backups/upload",
             },
         ],
         "campo_olts": {
@@ -534,8 +560,12 @@ def show_config(env: dict):
     print(f"  {'TELEGRAM_CHAT_ID':<22} {'configurado' if chat_id else clr(RED, 'não configurado')}")
     print()
 
-    # FTP / TFTP
-    for var in ["FTP_IP", "FTP_USER", "FTP_PASSWORD", "TFTP_IP"]:
+    # FTP / TFTP / SFTP-SCP (Datacom)
+    for var in [
+        "FTP_IP", "FTP_USER", "FTP_PASSWORD", "TFTP_IP",
+        "DATACOM_BACKUP_HOST", "DATACOM_BACKUP_USER", "DATACOM_BACKUP_PASSWORD",
+        "DATACOM_COPY_SCHEME", "DATACOM_BACKUP_SFTP_DIR",
+    ]:
         val = env.get(var, "")
         display = "****" if ("PASSWORD" in var and val) else (val or clr(RED, "não configurado"))
         print(f"  {var:<22} {display}")
