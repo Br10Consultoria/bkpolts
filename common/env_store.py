@@ -11,6 +11,7 @@ import re
 from pathlib import Path
 
 OLT_FIELD_RE = re.compile(r"^[^:,/]+$")
+OLT_NAME_RE = re.compile(r"^[A-Za-z0-9_-]+$")
 
 
 def load_env(env_file: Path) -> dict:
@@ -63,6 +64,18 @@ def validate_olt_field(value: str, field_label: str) -> str | None:
         return f"{field_label} não pode ficar em branco."
     if not OLT_FIELD_RE.match(value):
         return f"{field_label} não pode conter ':', ',' ou '/'."
+    return None
+
+
+def validate_olt_name(value: str) -> str | None:
+    """O nome vira parte de comandos enviados às OLTs (ex.: `save <arquivo>`
+    no Datacom) — espaço ou acento quebra a CLI de algumas OLTs com um
+    'syntax error' silencioso. Restringe a caracteres seguros em qualquer
+    vendor, não só letras/números/traço/underscore."""
+    if not value.strip():
+        return "Nome não pode ficar em branco."
+    if not OLT_NAME_RE.match(value):
+        return "Nome só pode conter letras, números, '_' e '-' (sem espaços ou acentos)."
     return None
 
 

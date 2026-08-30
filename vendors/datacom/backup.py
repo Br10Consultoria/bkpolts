@@ -37,6 +37,7 @@ Variáveis de ambiente necessárias:
 """
 
 import os
+import re
 import sys
 import time
 import telnetlib
@@ -85,7 +86,12 @@ def backup_datacom(olt: dict, progresso: str) -> bool:
         send_telnet_command(tn, "config")
 
         ts = datetime.now().strftime("%Y%m%d_%H%M%S")
-        filename = f"backup_{name}_{ts}.txt"
+        # A CLI da OLT quebra o comando `save` em tokens separados por espaço
+        # (e possivelmente outros caracteres especiais) — um nome de OLT como
+        # "PEDRO BRAGA NOVA" vira "syntax error: element does not exist".
+        # Sanitiza para um nome de arquivo seguro independente do nome exibido.
+        safe_name = re.sub(r"[^A-Za-z0-9_-]", "_", name)
+        filename = f"backup_{safe_name}_{ts}.txt"
 
         # Salvar backup na OLT
         send_telnet_command(tn, f"save {filename}")

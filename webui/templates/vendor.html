@@ -79,5 +79,9 @@
   <h2>Log recente</h2>
   <pre class="log">{{ log_text }}</pre>
   <a class="muted" href="{{ url_for('vendor_page', vendor=vendor) }}">atualizar</a>
+  <form method="post" action="{{ url_for('vendor_clear_logs', vendor=vendor) }}" style="display:inline; margin-left:12px;" onsubmit="return confirm('Limpar o log deste vendor? Não dá pra desfazer.');">
+    <input type="hidden" name="csrf" value="{{ csrf }}">
+    <button type="submit" class="secondary">Limpar log</button>
+  </form>
 </div>
 {% endblock %}

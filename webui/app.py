@@ -36,8 +36,8 @@ LOG_DIR = BASE_DIR / "logs"
 
 sys.path.insert(0, str(BASE_DIR))
 from common.env_store import (  # noqa: E402
-    load_env, save_env, validate_olt_field, validate_olt_password,
-    parse_olts_raw, serialize_olts,
+    load_env, save_env, validate_olt_field, validate_olt_name,
+    validate_olt_password, parse_olts_raw, serialize_olts,
 )
 
 # Cada vendor pode ter mais de uma lista de OLTs (ex.: ZTE padrão + Titan
@@ -154,6 +154,15 @@ def is_running(key: str) -> bool:
             return True
         del _running_jobs[key]
         return False
+
+
+def is_vendor_busy(vendor: str) -> bool:
+    """True se o vendor inteiro OU qualquer OLT dele tiver um backup rodando."""
+    if is_running(vendor):
+        return True
+    with _jobs_lock:
+        keys = [k for k in _running_jobs if k.startswith(f"{vendor}:")]
+    return any(is_running(k) for k in keys)
 
 
 def start_backup(vendor: str, olt_name: str | None = None) -> bool:
@@ -276,7 +285,11 @@ def vendor_add(vendor):
     user = request.form.get("user", "").strip()
     password = request.form.get("password", "")
 
-    for value, label in [(name, "Nome"), (ip, "IP"), (user, "Usuário")]:
+    err = validate_olt_name(name)
+    if err:
+        flash(err, "error")
+        return redirect(url_for("vendor_page", vendor=vendor))
+    for value, label in [(ip, "IP"), (user, "Usuário")]:
         err = validate_olt_field(value, label)
         if err:
             flash(err, "error")
@@ -349,6 +362,23 @@ def vendor_stop(vendor):
         )
     else:
         flash("Não havia backup em execução para esse alvo.", "error")
+    return redirect(url_for("vendor_page", vendor=vendor))
+
+
+@app.route("/vendor/<vendor>/logs/clear", methods=["POST"])
+@login_required
+def vendor_clear_logs(vendor):
+    if vendor not in VENDOR_OLT_VARS or not check_csrf():
+        return redirect(url_for("vendor_page", vendor=vendor))
+
+    if is_vendor_busy(vendor):
+        flash("Tem um backup rodando agora — espere terminar (ou pare) antes de limpar o log.", "error")
+        return redirect(url_for("vendor_page", vendor=vendor))
+
+    script_vendor = VENDOR_SCRIPT.get(vendor, vendor)
+    log_file = LOG_DIR / f"backup_{script_vendor}.log"
+    log_file.write_text("", encoding="utf-8")
+    flash("Log limpo.", "success")
     return redirect(url_for("vendor_page", vendor=vendor))
 
 
