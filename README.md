@@ -180,6 +180,7 @@ O que dá pra fazer pelo painel:
 - Cadastrar, listar e remover OLTs por vendor (grava direto no `.env`, mesmo formato `NOME:IP:USUARIO:SENHA` usado pelo resto do projeto).
 - Disparar o backup de uma OLT específica ou de todas as OLTs de um vendor, sem esperar o horário agendado.
 - Acompanhar o log da última execução de cada vendor.
+- Parar um backup em execução (vendor inteiro ou uma OLT específica) — útil se travar por causa de rede ou de uma OLT sem resposta. A sessão pode ficar pendurada na OLT até o timeout dela, mas o processo do lado do servidor é encerrado na hora.
 - Editar Telegram e as configurações de backup Datacom (host/usuário/senha/esquema SFTP-SCP).
 
 O que **não** é feito pelo painel, de propósito: criar o usuário SSH/chroot do host e editar o `sshd_config` (isso é o `setup_datacom_sftp.sh`, rodado manualmente com sudo — ver seção acima). Um app web com permissão de root pra mexer em usuários do sistema e no SSH é um risco desproporcional ao benefício: se alguém contornar o login do painel, ganharia root na máquina. Cadastro de OLT e disparo de backup não têm esse risco (na pior hipótese, alguém logado no painel vê/edita credenciais que já estão em texto puro no `.env` mesmo).

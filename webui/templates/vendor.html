@@ -7,14 +7,18 @@
 
 <div class="card">
   <h2>Backup</h2>
-  <form method="post" action="{{ url_for('vendor_backup', vendor=vendor) }}">
-    <input type="hidden" name="csrf" value="{{ csrf }}">
-    {% if vendor_running %}
-      <span class="badge warn">Rodando…</span> a página atualiza sozinha a cada 5s.
-    {% else %}
+  {% if vendor_running %}
+    <span class="badge warn">Rodando…</span> a página atualiza sozinha a cada 5s.
+    <form method="post" action="{{ url_for('vendor_stop', vendor=vendor) }}" style="display:inline;" onsubmit="return confirm('Parar o backup deste vendor? A OLT pode ficar com a sessão pendurada até o timeout dela.');">
+      <input type="hidden" name="csrf" value="{{ csrf }}">
+      <button type="submit" class="danger">Parar</button>
+    </form>
+  {% else %}
+    <form method="post" action="{{ url_for('vendor_backup', vendor=vendor) }}">
+      <input type="hidden" name="csrf" value="{{ csrf }}">
       <button type="submit">Rodar backup de todas as OLTs deste vendor agora</button>
-    {% endif %}
-  </form>
+    </form>
+  {% endif %}
 </div>
 
 {% for group in groups %}
@@ -31,16 +35,24 @@
         {% if olt.running %}<span class="badge warn">rodando…</span>{% endif %}
       </td>
       <td style="white-space:nowrap;">
+        {% if olt.running %}
+        <form method="post" action="{{ url_for('vendor_stop', vendor=vendor) }}" style="display:inline;" onsubmit="return confirm('Parar o backup de {{ olt.name }}? A OLT pode ficar com a sessão pendurada até o timeout dela.');">
+          <input type="hidden" name="csrf" value="{{ csrf }}">
+          <input type="hidden" name="olt_name" value="{{ olt.name }}">
+          <button type="submit" class="danger">Parar</button>
+        </form>
+        {% else %}
         <form method="post" action="{{ url_for('vendor_backup', vendor=vendor) }}" style="display:inline;">
           <input type="hidden" name="csrf" value="{{ csrf }}">
           <input type="hidden" name="olt_name" value="{{ olt.name }}">
-          <button type="submit" class="secondary" {% if olt.running %}disabled{% endif %}>Backup agora</button>
+          <button type="submit" class="secondary">Backup agora</button>
         </form>
         <form method="post" action="{{ url_for('vendor_delete', vendor=vendor, name=olt.name) }}" style="display:inline;" onsubmit="return confirm('Remover OLT {{ olt.name }}?');">
           <input type="hidden" name="csrf" value="{{ csrf }}">
           <input type="hidden" name="list_var" value="{{ group.var }}">
           <button type="submit" class="danger">Remover</button>
         </form>
+        {% endif %}
       </td>
     </tr>
     {% else %}

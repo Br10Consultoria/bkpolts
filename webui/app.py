@@ -180,6 +180,27 @@ def start_backup(vendor: str, olt_name: str | None = None) -> bool:
     return True
 
 
+def stop_backup(vendor: str, olt_name: str | None = None) -> bool:
+    """Encerra um backup em execução. Retorna False se nada estava rodando.
+
+    A OLT pode ficar com a sessão Telnet/config pendurada até o próprio
+    timeout dela — isso é inerente a interromper no meio, não tem como
+    fechar "com educação" um processo que já pode estar travado."""
+    key = job_key(vendor, olt_name)
+    with _jobs_lock:
+        proc = _running_jobs.get(key)
+        if proc is None or proc.poll() is not None:
+            return False
+        proc.terminate()
+        try:
+            proc.wait(timeout=5)
+        except subprocess.TimeoutExpired:
+            proc.kill()
+            proc.wait(timeout=5)
+        del _running_jobs[key]
+    return True
+
+
 def tail_log(vendor: str, lines: int = 60) -> str:
     script_vendor = VENDOR_SCRIPT.get(vendor, vendor)
     log_file = LOG_DIR / f"backup_{script_vendor}.log"
@@ -309,6 +330,25 @@ def vendor_backup(vendor):
         flash(f"Backup iniciado para {alvo}. Acompanhe pelo log abaixo.", "success")
     else:
         flash("Já existe um backup em execução para esse alvo — aguarde terminar.", "error")
+    return redirect(url_for("vendor_page", vendor=vendor))
+
+
+@app.route("/vendor/<vendor>/stop", methods=["POST"])
+@login_required
+def vendor_stop(vendor):
+    if vendor not in VENDOR_OLT_VARS or not check_csrf():
+        return redirect(url_for("vendor_page", vendor=vendor))
+
+    olt_name = request.form.get("olt_name") or None
+    if stop_backup(vendor, olt_name):
+        alvo = olt_name or "todas as OLTs"
+        flash(
+            f"Backup de {alvo} interrompido. A sessão pode continuar aberta na "
+            f"OLT até o timeout dela — se for tentar de novo, espere um pouco.",
+            "success",
+        )
+    else:
+        flash("Não havia backup em execução para esse alvo.", "error")
     return redirect(url_for("vendor_page", vendor=vendor))
 
 
