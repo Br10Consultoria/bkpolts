@@ -1,39 +1,24 @@
 #!/usr/bin/env python3
 """
-Backup de OLTs Datacom (DM4615, DM4618 e demais DmOS) — Telnet + SFTP/SCP
+Backup de OLTs Datacom (DM4615, DM4618 e demais DmOS) — Telnet + TFTP
 
-Fluxo por OLT:
-  1. Conecta via Telnet, faz login, entra em config.
-  2. Salva backup com nome único (backup_NOME_TIMESTAMP.txt).
-  3. A própria OLT envia o arquivo via SFTP/SCP para um servidor SSH
-     dedicado (ver README, seção "Servidor de backup Datacom").
+Fluxo por OLT (confirmado contra sessão real de produção):
+  1. Conecta via Telnet, faz login.
+  2. Salva o running-config com nome único, direto no prompt exec (sem
+     entrar em "config"): `show running-config | save overwrite <arquivo>`.
+  3. Envia o arquivo para o servidor TFTP (serviço "tftp" deste mesmo
+     docker-compose — ver README, seção "Servidor de backup Datacom"):
+     `copy file <arquivo> tftp://<TFTP_IP>`.
   4. Aguarda o arquivo chegar no diretório local (/app/backups), que é o
-     mesmo diretório onde o usuário SFTP do host grava (bind mount).
+     mesmo diretório onde o container tftp escreve (mesmo volume).
   5. Envia o arquivo ao Telegram.
   6. Aguarda 10s antes da próxima OLT.
 
-ATENÇÃO — verifique antes de usar em produção:
-  O comando de destino usado abaixo (`copy file <arquivo> {scheme}://...`)
-  assume que o firmware DmOS aceita o esquema configurado em
-  DATACOM_COPY_SCHEME (padrão "sftp"). Isso NÃO foi confirmado contra o
-  manual/firmware específico das OLTs 4615/4618 em uso. Antes do primeiro
-  uso real, conecte via telnet em uma OLT, entre em "config" e rode:
-
-      copy ?
-
-  Isso lista os esquemas de destino aceitos (tftp:, ftp:, sftp:, scp: etc.).
-  Se o correto for "scp" em vez de "sftp", basta ajustar
-  DATACOM_COPY_SCHEME=scp no .env — nenhum código precisa mudar.
-
 Variáveis de ambiente necessárias:
-  DATACOM_OLTS           — formato NOME:IP:USER:PASS separados por vírgula
-  DATACOM_BACKUP_HOST    — IP do servidor SSH que recebe os backups
-  DATACOM_BACKUP_USER    — usuário SFTP/SCP dedicado (ver README)
-  DATACOM_BACKUP_PASSWORD— senha desse usuário
-  DATACOM_BACKUP_PATH    — caminho remoto (relativo ao chroot) onde salvar,
-                            padrão "" (raiz do chroot)
-  DATACOM_COPY_SCHEME    — "sftp" (padrão) ou "scp", conforme confirmado
-                            no `copy ?` da OLT
+  DATACOM_OLTS  — formato NOME:IP:USER:PASS separados por vírgula
+  TFTP_IP       — IP do servidor TFTP (o serviço "tftp" deste projeto,
+                   rodando com network_mode: host — normalmente o IP
+                   deste mesmo servidor)
 """
 
 import os
@@ -51,18 +36,8 @@ from common.parser import parse_olts
 
 log = setup_logging("datacom")
 
-BACKUP_HOST = os.getenv("DATACOM_BACKUP_HOST", "")
-BACKUP_USER = os.getenv("DATACOM_BACKUP_USER", "")
-BACKUP_PASSWORD = os.getenv("DATACOM_BACKUP_PASSWORD", "")
-BACKUP_REMOTE_PATH = os.getenv("DATACOM_BACKUP_PATH", "").strip("/")
-COPY_SCHEME = os.getenv("DATACOM_COPY_SCHEME", "sftp").strip().lower()
+TFTP_IP = os.getenv("TFTP_IP", "")
 BACKUP_DIR = "/app/backups"
-
-
-def _build_copy_destination(filename: str) -> str:
-    """Monta a URL de destino do comando `copy` conforme DATACOM_COPY_SCHEME."""
-    remote_path = f"{BACKUP_REMOTE_PATH}/{filename}" if BACKUP_REMOTE_PATH else filename
-    return f"{COPY_SCHEME}://{BACKUP_USER}:{BACKUP_PASSWORD}@{BACKUP_HOST}/{remote_path}"
 
 
 def backup_datacom(olt: dict, progresso: str) -> bool:
@@ -83,8 +58,6 @@ def backup_datacom(olt: dict, progresso: str) -> bool:
         tn.read_until(b"Welcome to the DmOS CLI", timeout=20)
         log.info("Login OK")
 
-        send_telnet_command(tn, "config")
-
         ts = datetime.now().strftime("%Y%m%d_%H%M%S")
         # A CLI da OLT quebra o comando `save` em tokens separados por espaço
         # (e possivelmente outros caracteres especiais) — um nome de OLT como
@@ -93,26 +66,18 @@ def backup_datacom(olt: dict, progresso: str) -> bool:
         safe_name = re.sub(r"[^A-Za-z0-9_-]", "_", name)
         filename = f"backup_{safe_name}_{ts}.txt"
 
-        # Salvar backup na OLT
-        send_telnet_command(tn, f"save {filename}")
-        log.info("Aguardando 90s para gravação interna...")
-        time.sleep(90)
+        # Salvar backup na OLT — direto no prompt exec (sem entrar em "config").
+        send_telnet_command(tn, f"show running-config | save overwrite {filename}")
+        log.info("Aguardando 10s para gravação interna...")
+        time.sleep(10)
 
-        # Enviar via SFTP/SCP para o servidor de backup dedicado.
-        # Não usa send_telnet_command aqui de propósito: aquele helper loga o
-        # comando inteiro, e este comando embute a senha na URL de destino.
-        destination = _build_copy_destination(filename)
-        log.info("CMD >> copy file %s %s://%s:****@%s/...", filename, COPY_SCHEME, BACKUP_USER, BACKUP_HOST)
-        tn.write(f"copy file {filename} {destination}".encode("ascii") + b"\n")
-        time.sleep(90)
-        response = tn.read_very_eager().decode("ascii", errors="replace")
-        if response.strip():
-            log.info("RESP << %s", response.strip()[:500])
+        # Enviar para o TFTP
+        send_telnet_command(tn, f"copy file {filename} tftp://{TFTP_IP}", wait_time=30)
 
         tn.write(b"exit\n")
         tn.close()
 
-        # Aguardar arquivo chegar (bind mount compartilhado com o host SSH)
+        # Aguardar arquivo chegar (mesmo volume que o container tftp escreve)
         local_file = os.path.join(BACKUP_DIR, filename)
         last_size = -1
         stable = 0
@@ -120,7 +85,7 @@ def backup_datacom(olt: dict, progresso: str) -> bool:
         for i in range(90):
             if os.path.exists(local_file):
                 size = os.path.getsize(local_file)
-                log.info("Recebendo via %s (%ds): %d bytes", COPY_SCHEME, i * 2, size)
+                log.info("TFTP recebendo (%ds): %d bytes", i * 2, size)
                 if size == last_size and size > 0:
                     stable += 1
                 else:
@@ -135,8 +100,8 @@ def backup_datacom(olt: dict, progresso: str) -> bool:
 
         send_message(
             f"⚠️ {progresso} {name} — comando de cópia enviado mas o arquivo não "
-            f"chegou em {BACKUP_DIR}. Verifique o usuário/host SSH de backup e "
-            f"se DATACOM_COPY_SCHEME corresponde ao suportado pela OLT (`copy ?`)."
+            f"chegou em {BACKUP_DIR}. Verifique se o container 'tftp' está no ar "
+            f"e se TFTP_IP aponta para ele."
         )
         return False
 
@@ -153,10 +118,10 @@ def main():
         send_message("⚠️ Datacom: nenhuma OLT configurada em DATACOM_OLTS")
         return
 
-    if not BACKUP_HOST or not BACKUP_USER:
+    if not TFTP_IP:
         send_message(
-            "⚠️ Datacom: DATACOM_BACKUP_HOST/DATACOM_BACKUP_USER não configurados "
-            "no .env — veja o README (seção 'Servidor de backup Datacom')."
+            "⚠️ Datacom: TFTP_IP não configurado no .env — veja o README "
+            "(seção 'Servidor de backup Datacom')."
         )
         return
 

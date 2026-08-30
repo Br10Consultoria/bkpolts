@@ -9,7 +9,7 @@ services:
       - .env
     volumes:
       - .:/app                           # raiz do projeto — git pull reflete imediatamente
-      - ${DATACOM_BACKUP_SFTP_DIR:-backup-data}:/app/backups  # ver README (Servidor de backup Datacom)
+      - ${DATACOM_BACKUP_DIR:-backup-data}:/app/backups  # mesmo volume que o serviço tftp escreve
       - backup-logs:/app/logs            # logs de execução (volume persistente)
       - /etc/localtime:/etc/localtime:ro
     environment:
@@ -27,12 +27,23 @@ services:
       - .env
     volumes:
       - .:/app
-      - ${DATACOM_BACKUP_SFTP_DIR:-backup-data}:/app/backups  # mesmo volume do olt-backup
+      - ${DATACOM_BACKUP_DIR:-backup-data}:/app/backups  # mesmo volume do olt-backup
       - backup-logs:/app/logs
       - /etc/localtime:/etc/localtime:ro
     environment:
       - TZ=America/Bahia
     network_mode: host                   # o botão "backup agora" precisa alcançar as OLTs
+
+  tftp:
+    build:
+      context: ./tftp
+      dockerfile: Dockerfile
+    container_name: olt-backup-tftp
+    restart: unless-stopped
+    volumes:
+      - ${DATACOM_BACKUP_DIR:-backup-data}:/srv/tftp  # mesmo volume que olt-backup lê em /app/backups
+    network_mode: host                   # TFTP negocia a transferência numa porta UDP
+                                          # efêmera que não atravessa o NAT do modo bridge
 
 volumes:
   backup-data:

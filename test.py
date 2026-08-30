@@ -48,7 +48,7 @@ REQUIRED_VARS = {
 }
 
 VENDOR_REQUIRED_VARS = {
-    "datacom":   ["DATACOM_BACKUP_HOST", "DATACOM_BACKUP_USER", "DATACOM_BACKUP_PASSWORD", "DATACOM_OLTS"],
+    "datacom":   ["TFTP_IP", "DATACOM_OLTS"],
     "zte":       ["FTP_IP", "FTP_USER", "FTP_PASSWORD"],
     "parks":     ["FTP_IP", "FTP_USER", "FTP_PASSWORD", "PARKS_OLTS"],
     "fiberhome": ["FTP_IP", "FTP_USER", "FTP_PASSWORD", "FIBERHOME_OLTS"],

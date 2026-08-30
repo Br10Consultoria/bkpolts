@@ -48,15 +48,17 @@ cd /opt/bkpolts && docker compose up -d --build
 ```
 bkpolts/
 ├── setup.sh                # Instalação automática do Docker + ambiente
-├── setup_datacom_sftp.sh   # Cria o usuário SFTP/chroot de backup Datacom (sudo, uma vez)
 ├── Dockerfile              # Imagem Docker (única para todos os vendors + webui)
-├── docker-compose.yml      # Orquestração dos containers (olt-backup + webui)
+├── docker-compose.yml      # Orquestração dos containers (olt-backup + webui + tftp)
 ├── entrypoint.sh           # Inicia o scheduler.py ao subir o container
 ├── run.py                  # CLI interativo para backup manual
 ├── scheduler.py            # Daemon de agendamento (13h e 22h)
 ├── requirements.txt        # Dependências Python
 ├── .env                    # Credenciais e configuração (NÃO versionado)
 ├── .env.example            # Modelo de configuração
+│
+├── tftp/
+│   └── Dockerfile          # Servidor TFTP dedicado ao backup Datacom
 │
 ├── common/                 # Módulo compartilhado por todos os vendors
 │   ├── __init__.py
@@ -71,7 +73,7 @@ bkpolts/
 │
 └── vendors/                # Um diretório por fabricante
     ├── datacom/
-    │   └── backup.py       # Datacom — Telnet + SFTP/SCP
+    │   └── backup.py       # Datacom — Telnet + TFTP
     ├── zte/
     │   └── backup.py       # ZTE padrão + ZTE Titan — Telnet + FTP
     ├── parks/
@@ -109,7 +111,7 @@ O `run.py` é o CLI interativo para execução manual, com menu de seleção de 
 
 | Vendor | Protocolo de acesso | Protocolo de transferência |
 |---|---|---|
-| **Datacom** | Telnet | SFTP/SCP (`DATACOM_COPY_SCHEME`) |
+| **Datacom** | Telnet | TFTP (container `tftp` deste projeto) |
 | **ZTE** | Telnet | FTP |
 | **ZTE Titan** | Telnet | FTP |
 | **Parks** | Telnet | FTP |
@@ -118,51 +120,29 @@ O `run.py` é o CLI interativo para execução manual, com menu de seleção de 
 
 ---
 
-## Servidor de backup Datacom (SFTP/SCP)
+## Servidor de backup Datacom (TFTP)
 
-O backup Datacom não depende mais de um servidor TFTP (que nunca chegou a existir neste projeto — era a causa dos backups "enviados mas nunca recebidos"). Em vez disso, a própria OLT envia o arquivo via SFTP/SCP para um usuário SSH dedicado e restrito (chroot) no host Debian/Ubuntu que roda o Docker. Como o `sshd` já vem instalado por padrão em qualquer distro dessas, não é preciso instalar nada além do OpenSSH.
-
-> **Antes de tudo:** conecte via telnet numa OLT, entre em `config` e rode `copy ?` para confirmar se o firmware aceita `sftp://` ou `scp://` como destino. Ajuste `DATACOM_COPY_SCHEME` no `.env` conforme o resultado — o código não precisa mudar.
-
-### 1. Criar o usuário dedicado no host (script automático)
-
-Esse passo precisa de root pra criar usuário de sistema e editar o `sshd_config` — por isso é um script que você roda uma vez no host, não algo que a interface web faz (ver seção "Interface Web" abaixo, sobre por quê).
-
-```bash
-sudo bash setup_datacom_sftp.sh
-# ou, com usuário/diretório customizados:
-sudo bash setup_datacom_sftp.sh --user oltbackup --dir /srv/olt-backups
-```
-
-O script cria o usuário, ajusta permissões do chroot, pede a senha, adiciona o bloco `Match User` no `/etc/ssh/sshd_config` (validando a sintaxe antes de aplicar, pra não derrubar o SSH da máquina) e reinicia o `sshd`. É idempotente — pode rodar de novo pra trocar a senha ou reaplicar a configuração.
-
-Se preferir fazer manualmente, ou se o `copy ?` da OLT mostrar que o firmware fala SCP puro (não SFTP), o bloco que o script gera é:
+O comando de backup confirmado contra uma sessão real de produção é:
 
 ```
-Match User oltbackup
-    ChrootDirectory /srv/olt-backups
-    ForceCommand internal-sftp
-    PasswordAuthentication yes
-    AllowTcpForwarding no
-    X11Forwarding no
+show running-config | save overwrite <arquivo>     # direto no prompt exec, sem entrar em "config"
+copy file <arquivo> tftp://<TFTP_IP>
 ```
 
-Para SCP puro, troque `ForceCommand internal-sftp` por `ForceCommand /usr/lib/openssh/sftp-server`, ou restrinja o shell do usuário com `rssh`/`scponly` em vez de um `Match User` — ajuste manual, não coberto pelo script.
+O `docker-compose.yml` já sobe um terceiro serviço, `tftp` (Dockerfile em `tftp/`, baseado em `tftpd-hpa`), então não precisa instalar nem configurar nada à parte no host — só apontar `TFTP_IP` para o IP deste mesmo servidor.
 
-### 2. Apontar o `.env` (ou a interface web, em Configurações) para esse usuário
+> TFTP negocia a transferência de dados numa porta UDP efêmera (não fixa na 69), o que não atravessa o NAT do modo bridge padrão do Docker — por isso os três serviços (`olt-backup`, `webui`, `tftp`) rodam com `network_mode: host`. Isso já vem configurado; não precisa mexer.
+
+### 1. Configurar o `.env` (ou a interface web, em Configurações)
 
 ```env
-DATACOM_BACKUP_HOST=10.0.0.1            # IP do host onde o sshd está rodando
-DATACOM_BACKUP_USER=oltbackup
-DATACOM_BACKUP_PASSWORD=SENHA_FORTE_AQUI
-DATACOM_BACKUP_PATH=                    # vazio = grava direto em /srv/olt-backups/upload
-DATACOM_COPY_SCHEME=sftp                # ou "scp", conforme confirmado no `copy ?`
-DATACOM_BACKUP_SFTP_DIR=/srv/olt-backups/upload
+TFTP_IP=10.0.0.1              # IP deste servidor
+DATACOM_BACKUP_DIR=           # vazio = usa um volume Docker nomeado comum
 ```
 
-`DATACOM_BACKUP_SFTP_DIR` faz o `docker-compose.yml` montar exatamente essa pasta do host como `/app/backups` dentro do container — é assim que o script Python enxerga o arquivo que a OLT acabou de enviar via SFTP, sem precisar de nenhuma outra ponte entre host e container.
+`DATACOM_BACKUP_DIR`, se preenchido com um caminho absoluto (ex.: `/srv/olt-backups`), faz o `docker-compose.yml` montar essa pasta do host tanto no container `tftp` (que grava o arquivo recebido) quanto em `olt-backup`/`webui` (que leem o arquivo e mandam ao Telegram) — os três enxergam exatamente o mesmo diretório. Deixar em branco também funciona (usa um volume Docker nomeado interno), só fica menos prático se um dia você quiser inspecionar os arquivos direto pelo filesystem do host.
 
-### 3. Recriar os containers para aplicar o bind mount
+### 2. Subir os containers
 
 ```bash
 docker compose up -d --build
@@ -172,18 +152,16 @@ docker compose up -d --build
 
 ## Interface Web
 
-`docker compose up -d --build` sobe dois serviços: `olt-backup` (o `scheduler.py`, que dispara os backups agendados) e `webui` (painel para cadastrar OLTs e rodar backups manualmente), escutando em `http://<ip-do-servidor>:8080` (porta configurável em `WEBUI_PORT`).
+`docker compose up -d --build` sobe três serviços: `olt-backup` (o `scheduler.py`, que dispara os backups agendados), `tftp` (recebe os backups Datacom) e `webui` (painel para cadastrar OLTs e rodar backups manualmente), este último escutando em `http://<ip-do-servidor>:8080` (porta configurável em `WEBUI_PORT`).
 
 Login: usuário/senha definidos em `WEBUI_USER` / `WEBUI_PASSWORD` no `.env`. **Não exponha essa porta na internet** mesmo com login habilitado — mantenha atrás de VPN/firewall, como já se faz hoje com o acesso Telnet às próprias OLTs.
 
 O que dá pra fazer pelo painel:
 - Cadastrar, listar e remover OLTs por vendor (grava direto no `.env`, mesmo formato `NOME:IP:USUARIO:SENHA` usado pelo resto do projeto).
 - Disparar o backup de uma OLT específica ou de todas as OLTs de um vendor, sem esperar o horário agendado.
-- Acompanhar o log da última execução de cada vendor.
+- Acompanhar o log da última execução de cada vendor, e limpar esse log quando quiser.
 - Parar um backup em execução (vendor inteiro ou uma OLT específica) — útil se travar por causa de rede ou de uma OLT sem resposta. A sessão pode ficar pendurada na OLT até o timeout dela, mas o processo do lado do servidor é encerrado na hora.
-- Editar Telegram e as configurações de backup Datacom (host/usuário/senha/esquema SFTP-SCP).
-
-O que **não** é feito pelo painel, de propósito: criar o usuário SSH/chroot do host e editar o `sshd_config` (isso é o `setup_datacom_sftp.sh`, rodado manualmente com sudo — ver seção acima). Um app web com permissão de root pra mexer em usuários do sistema e no SSH é um risco desproporcional ao benefício: se alguém contornar o login do painel, ganharia root na máquina. Cadastro de OLT e disparo de backup não têm esse risco (na pior hipótese, alguém logado no painel vê/edita credenciais que já estão em texto puro no `.env` mesmo).
+- Editar Telegram e o `TFTP_IP`/diretório de backup do Datacom.
 
 Se quiser rodar sem Docker (ex.: pra debugar): `python3 webui/app.py` (lê o `.env` da raiz do projeto).
 
@@ -285,7 +263,7 @@ Saída do menu:
 
   Vendors disponíveis (com OLTs configuradas no .env):
 
-  [1] Datacom   (Telnet + SFTP/SCP)                    ✔  2 OLT(s)
+  [1] Datacom   (Telnet + TFTP)                        ✔  2 OLT(s)
   [2] ZTE       (Telnet + FTP)  — padrão + Titan      ✔  2 OLT(s)
   [3] Parks     (Telnet + FTP)                        ✘  sem OLTs configuradas
   [4] Fiberhome (Telnet + FTP)                        ✘  sem OLTs configuradas

@@ -62,7 +62,7 @@ VENDOR_SCRIPT = {
 }
 
 VENDOR_LABELS = {
-    "datacom":       "Datacom (Telnet + SFTP/SCP)",
+    "datacom":       "Datacom (Telnet + TFTP)",
     "zte":           "ZTE — padrão + Titan (Telnet + FTP)",
     "parks":         "Parks (Telnet + FTP)",
     "fiberhome":     "Fiberhome (Telnet + FTP)",
@@ -395,15 +395,9 @@ def settings():
         updates = {
             "TELEGRAM_TOKEN": request.form.get("telegram_token", "").strip(),
             "TELEGRAM_CHAT_ID": request.form.get("telegram_chat_id", "").strip(),
-            "DATACOM_BACKUP_HOST": request.form.get("datacom_backup_host", "").strip(),
-            "DATACOM_BACKUP_USER": request.form.get("datacom_backup_user", "").strip(),
-            "DATACOM_BACKUP_PATH": request.form.get("datacom_backup_path", "").strip(),
-            "DATACOM_COPY_SCHEME": request.form.get("datacom_copy_scheme", "sftp").strip() or "sftp",
-            "DATACOM_BACKUP_SFTP_DIR": request.form.get("datacom_backup_sftp_dir", "").strip(),
+            "TFTP_IP": request.form.get("tftp_ip", "").strip(),
+            "DATACOM_BACKUP_DIR": request.form.get("datacom_backup_dir", "").strip(),
         }
-        new_datacom_pass = request.form.get("datacom_backup_password", "")
-        if new_datacom_pass:
-            updates["DATACOM_BACKUP_PASSWORD"] = new_datacom_pass
 
         new_webui_pass = request.form.get("new_webui_password", "").strip()
         if new_webui_pass:

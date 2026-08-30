@@ -16,20 +16,12 @@
 </div>
 
 <div class="card">
-  <h2>Servidor de backup Datacom (SFTP/SCP)</h2>
-  <p class="muted">O usuário SSH/chroot precisa ser criado no host antes (script setup_datacom_sftp.sh).</p>
+  <h2>Servidor de backup Datacom (TFTP)</h2>
+  <p class="muted">O docker-compose já sobe um container "tftp" pronto — normalmente o IP abaixo é o IP deste mesmo servidor. Depois de mudar, rode <code>docker compose up -d --build</code> para aplicar.</p>
   <div class="row">
-    <div><label>Host (IP deste servidor)</label><input type="text" name="datacom_backup_host" value="{{ env.get('DATACOM_BACKUP_HOST', '') }}"></div>
-    <div><label>Usuário SFTP/SCP</label><input type="text" name="datacom_backup_user" value="{{ env.get('DATACOM_BACKUP_USER', '') }}"></div>
+    <div><label>IP do servidor TFTP</label><input type="text" name="tftp_ip" value="{{ env.get('TFTP_IP', '') }}"></div>
+    <div><label>Diretório no host (compartilhado com o container tftp)</label><input type="text" name="datacom_backup_dir" value="{{ env.get('DATACOM_BACKUP_DIR', '') }}"></div>
   </div>
-  <label>Nova senha do usuário SFTP/SCP (deixe em branco para manter a atual)</label>
-  <input type="password" name="datacom_backup_password">
-  <div class="row">
-    <div><label>Caminho remoto (vazio = raiz do chroot)</label><input type="text" name="datacom_backup_path" value="{{ env.get('DATACOM_BACKUP_PATH', '') }}"></div>
-    <div><label>Esquema (`copy ?` na OLT)</label><input type="text" name="datacom_copy_scheme" value="{{ env.get('DATACOM_COPY_SCHEME', 'sftp') }}"></div>
-  </div>
-  <label>Diretório no host (bind mount de /app/backups)</label>
-  <input type="text" name="datacom_backup_sftp_dir" value="{{ env.get('DATACOM_BACKUP_SFTP_DIR', '') }}">
 </div>
 
 <div class="card">
