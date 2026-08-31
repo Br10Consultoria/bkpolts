@@ -4,9 +4,12 @@ ENV TZ=America/Bahia
 ENV PYTHONUNBUFFERED=1
 ENV PYTHONPATH=/app
 
-# Pacotes do sistema: tzdata (necessário para zoneinfo do Python)
+# Pacotes do sistema: tzdata (necessário para zoneinfo do Python) e
+# procps (fornece pkill/pgrep, usado pela interface web para garantir que
+# o botão "Parar" encerre um backup mesmo que o painel tenha perdido o
+# rastro do processo, ex.: após reiniciar o container).
 RUN apt-get update && \
-    apt-get install -y --no-install-recommends tzdata && \
+    apt-get install -y --no-install-recommends tzdata procps && \
     apt-get clean && \
     rm -rf /var/lib/apt/lists/*
 

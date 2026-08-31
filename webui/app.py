@@ -189,25 +189,48 @@ def start_backup(vendor: str, olt_name: str | None = None) -> bool:
     return True
 
 
+def _pkill_vendor_script(vendor: str) -> bool:
+    """Mata, por padrão de linha de comando, qualquer processo rodando o
+    backup.py deste vendor NESTE container — cobre casos que o dict
+    _running_jobs não sabe sobre: o painel perdeu o rastro (ex.: reiniciou),
+    ou o processo foi iniciado via `docker exec ... run.py`/`scheduler.py`
+    dentro deste mesmo container. Não alcança OUTRO container (o daemon
+    agendado roda em "olt-backup", um container separado com seu próprio
+    espaço de processos — para matar algo lá, use
+    `docker exec olt-backup pkill -f backup.py`)."""
+    script = BASE_DIR / "vendors" / VENDOR_SCRIPT[vendor] / "backup.py"
+    try:
+        result = subprocess.run(["pkill", "-f", str(script)], capture_output=True)
+    except FileNotFoundError:
+        log_dir_msg = "pkill não encontrado na imagem — reconstrua com 'docker compose up -d --build'."
+        print(log_dir_msg, file=sys.stderr)
+        return False
+    return result.returncode == 0
+
+
 def stop_backup(vendor: str, olt_name: str | None = None) -> bool:
-    """Encerra um backup em execução. Retorna False se nada estava rodando.
+    """Encerra um backup em execução. Retorna False se nada foi encontrado
+    para matar (nem rastreado, nem por padrão de linha de comando).
 
     A OLT pode ficar com a sessão Telnet/config pendurada até o próprio
     timeout dela — isso é inerente a interromper no meio, não tem como
     fechar "com educação" um processo que já pode estar travado."""
     key = job_key(vendor, olt_name)
+    stopped_tracked = False
     with _jobs_lock:
         proc = _running_jobs.get(key)
-        if proc is None or proc.poll() is not None:
-            return False
-        proc.terminate()
-        try:
-            proc.wait(timeout=5)
-        except subprocess.TimeoutExpired:
-            proc.kill()
-            proc.wait(timeout=5)
-        del _running_jobs[key]
-    return True
+        if proc is not None and proc.poll() is None:
+            proc.terminate()
+            try:
+                proc.wait(timeout=5)
+            except subprocess.TimeoutExpired:
+                proc.kill()
+                proc.wait(timeout=5)
+            stopped_tracked = True
+        _running_jobs.pop(key, None)
+
+    stopped_pkill = _pkill_vendor_script(vendor)
+    return stopped_tracked or stopped_pkill
 
 
 def tail_log(vendor: str, lines: int = 60) -> str:
@@ -354,14 +377,16 @@ def vendor_stop(vendor):
 
     olt_name = request.form.get("olt_name") or None
     if stop_backup(vendor, olt_name):
-        alvo = olt_name or "todas as OLTs"
         flash(
-            f"Backup de {alvo} interrompido. A sessão pode continuar aberta na "
-            f"OLT até o timeout dela — se for tentar de novo, espere um pouco.",
+            f"Backup de {vendor} interrompido neste container (webui). A sessão pode "
+            f"continuar aberta na OLT até o timeout dela — espere um pouco antes de "
+            f"tentar de novo. Se o agendador automático (container olt-backup) também "
+            f"estiver rodando esse vendor, isso aqui não o alcança — use "
+            f"'docker exec olt-backup pkill -f backup.py' nesse caso.",
             "success",
         )
     else:
-        flash("Não havia backup em execução para esse alvo.", "error")
+        flash("Não havia backup em execução para esse alvo neste container.", "error")
     return redirect(url_for("vendor_page", vendor=vendor))
 
 
