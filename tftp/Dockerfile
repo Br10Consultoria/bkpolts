@@ -16,12 +16,14 @@ RUN mkdir -p /srv/tftp && chown tftpuser:tftpuser /srv/tftp
 
 EXPOSE 69/udp
 
-# --listen: modo standalone (o padrão do in.tftpd é esperar ser invocado
-#           pelo inetd por conexão — não existe inetd no container).
+# --foreground: modo standalone SEM daemonizar (--listen sozinho solta do
+#           foreground — o processo faz fork e o pai sai com código 0, o
+#           que derruba o PID 1 do container e gera reinício em loop sem
+#           nenhum log, exatamente o sintoma visto em produção).
 # --secure: chroot para o diretório informado (sem isso, o cliente poderia
 #           requisitar caminhos fora dele).
 # --create: permite gravar arquivos novos (sem isso, o tftpd-hpa só
 #           sobrescreve arquivos já existentes — e a OLT manda um nome novo
 #           a cada backup, com timestamp).
-ENTRYPOINT ["/usr/sbin/in.tftpd", "--listen", "--user", "tftpuser", \
+ENTRYPOINT ["/usr/sbin/in.tftpd", "--foreground", "--user", "tftpuser", \
             "--address", "0.0.0.0:69", "--secure", "--create", "/srv/tftp"]
