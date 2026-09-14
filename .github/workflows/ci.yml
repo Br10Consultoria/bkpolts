@@ -19,3 +19,15 @@ jobs:
       - run: cp .env.example .env
       - run: docker compose config --quiet
       - run: docker compose build
+      - name: Smoke test dos containers
+        run: |
+          docker compose up -d
+          sleep 8
+          if [ "$(docker compose ps --status running --services | wc -l)" -ne 5 ]; then
+            docker compose ps
+            docker compose logs
+            exit 1
+          fi
+          docker compose ps
+      - if: always()
+        run: docker compose down -v
