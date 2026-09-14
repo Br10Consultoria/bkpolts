@@ -187,6 +187,8 @@ python3 import_inventory.py inventory/zbx_export_hosts.json --username bkpolt
 docker compose restart snmp-monitor webui
 ```
 
+Se uma instalação antiga mostrar zero OLTs e não solicitar a senha, atualize o repositório e execute novamente o instalador. A validação atual não confia apenas na flag antiga: se as listas estiverem vazias, a senha será solicitada e as 20 OLTs serão importadas.
+
 Login: usuário/senha definidos em `WEBUI_USER` / `WEBUI_PASSWORD` no `.env`. **Não exponha essa porta na internet** mesmo com login habilitado — mantenha atrás de VPN/firewall, como já se faz hoje com o acesso Telnet às próprias OLTs.
 
 O que dá pra fazer pelo painel:

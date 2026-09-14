@@ -396,7 +396,15 @@ import_initial_inventory() {
     if [[ -f "${REPO_DIR}/inventory/zbx_export_hosts.json" ]]; then
         inventory_file="${REPO_DIR}/inventory/zbx_export_hosts.json"
     fi
-    if [[ ! -f "$inventory_file" ]] || grep -q '^INITIAL_INVENTORY_IMPORTED=1$' "$env_file"; then
+    if [[ ! -f "$inventory_file" ]]; then
+        return 0
+    fi
+    # Não confia somente na flag: versões antigas podiam marcá-la mesmo com
+    # todas as listas vazias. Só pula quando há de fato alguma OLT cadastrada.
+    local configured_olts
+    configured_olts=$(grep -Ec '^(DATACOM_OLTS|ZTE_OLTS|ZTE_TITAN_OLTS|HUAWEI_OLTS)=.+' "$env_file" || true)
+    if grep -q '^INITIAL_INVENTORY_IMPORTED=1$' "$env_file" && [[ "$configured_olts" -gt 0 ]]; then
+        log_info "Inventário inicial já importado; mantendo as OLTs existentes."
         return 0
     fi
     log_step "Importando inventário inicial de OLTs..."
@@ -418,6 +426,9 @@ import_initial_inventory() {
     unset olt_password
     set_env_value INITIAL_INVENTORY_IMPORTED 1
     chmod 0600 "$env_file"
+    # O scheduler e o coletor SNMP recebem o .env no início do container.
+    # Recria os serviços para que enxerguem imediatamente as OLTs importadas.
+    docker compose up -d --force-recreate olt-backup webui snmp-monitor
     log_ok "20 OLTs Datacom, ZTE e Huawei processadas sem duplicar IPs."
 }
 
