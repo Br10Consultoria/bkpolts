@@ -34,22 +34,13 @@ from common.helpers import setup_logging, send_telnet_command, cleanup_file
 from common.telegram import send_message, send_file
 from common.parser import parse_olts
 from common.observability import tracked_backup
+from common.protocol_errors import datacom_tftp_failure_reason
 
 log = setup_logging("datacom")
 
 TFTP_IP = os.getenv("TFTP_IP", "")
 BACKUP_DIR = "/app/backups"
 STOP_ON_ERROR = os.getenv("STOP_ON_ERROR", "true").lower() in {"1", "true", "yes", "sim"}
-
-
-def tftp_failure_reason(response: str) -> str | None:
-    if not re.search(r"(?i)(upload transfer failed|transfer failed|\berror(?:s)?\s*:|timed?\s*out)", response):
-        return None
-    return next(
-        (line.strip() for line in response.splitlines()
-         if re.search(r"(?i)(failed|error|timed?\s*out)", line)),
-        "A OLT recusou ou não conseguiu concluir o envio TFTP",
-    )
 
 
 @tracked_backup("datacom", "tftp")
@@ -91,7 +82,7 @@ def backup_datacom(olt: dict, progresso: str) -> bool:
 
         # DmOS informa a falha no próprio retorno do comando. Antes esta
         # resposta era ignorada e o processo aguardava o arquivo por 180s.
-        reason = tftp_failure_reason(transfer_response)
+        reason = datacom_tftp_failure_reason(transfer_response)
         if reason:
             log.error("TFTP rejeitado pela OLT %s: %s", name, reason)
             tn.write(b"exit\n")
