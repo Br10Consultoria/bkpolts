@@ -1,6 +1,6 @@
 # OLT Backup — Multi-Vendor (Docker)
 
-Sistema modular de backup automatizado de OLTs com suporte a múltiplos fabricantes. Roda em Docker com agendamento automático via scheduler Python e envia notificações e arquivos de backup diretamente ao Telegram.
+Sistema modular de backup automatizado de OLTs com seleção de fabricante e modelo. Cada modelo usa seu próprio driver e os comandos homologados para ele. O instalador provisiona scheduler, painel web e receptores TFTP, FTP e SCP/SFTP, com armazenamento compartilhado e envio ao Telegram.
 
 > **Timezone:** fixo em `America/Bahia` em todo o sistema (scheduler, Docker, sistema operacional).
 
@@ -32,13 +32,15 @@ O script realiza automaticamente:
 | 6 | Configura timezone do sistema para `America/Bahia` |
 | 7 | Clona o repositório em `/opt/bkpolts` |
 | 8 | Cria o `.env` a partir do `.env.example` |
-| 9 | Exibe instruções finais de uso |
+| 9 | Detecta o IP principal e gera senhas fortes para painel, FTP e SCP/SFTP |
+| 10 | Configura UFW/firewalld quando presente |
+| 11 | Constrói, inicia e verifica todos os containers |
+| 12 | Exibe URL e credenciais iniciais do painel |
 
-Após o setup, edite o `.env` e suba o container:
+Após o setup, abra a URL exibida pelo instalador e cadastre as OLTs escolhendo fabricante e modelo. Para conferir os serviços:
 
 ```bash
-nano /opt/bkpolts/.env
-cd /opt/bkpolts && docker compose up -d --build
+cd /opt/bkpolts && docker compose ps
 ```
 
 ---
@@ -49,7 +51,7 @@ cd /opt/bkpolts && docker compose up -d --build
 bkpolts/
 ├── setup.sh                # Instalação automática do Docker + ambiente
 ├── Dockerfile              # Imagem Docker (única para todos os vendors + webui)
-├── docker-compose.yml      # Orquestração dos containers (olt-backup + webui + tftp)
+├── docker-compose.yml      # Scheduler, webui e receptores TFTP/FTP/SCP-SFTP
 ├── entrypoint.sh           # Inicia o scheduler.py ao subir o container
 ├── run.py                  # CLI interativo para backup manual
 ├── scheduler.py            # Daemon de agendamento (13h e 22h)
@@ -58,14 +60,19 @@ bkpolts/
 ├── .env.example            # Modelo de configuração
 │
 ├── tftp/
-│   └── Dockerfile          # Servidor TFTP dedicado ao backup Datacom
+│   └── Dockerfile          # Servidor TFTP
+├── ftp/
+│   └── Dockerfile          # Servidor FTP (vsftpd)
+├── sftp/
+│   └── Dockerfile          # Servidor SCP/SFTP (OpenSSH)
 │
 ├── common/                 # Módulo compartilhado por todos os vendors
 │   ├── __init__.py
 │   ├── telegram.py         # Envio de mensagens e arquivos ao Telegram
 │   ├── helpers.py          # Logging, Telnet, FTP download, cleanup
 │   ├── parser.py           # Parser de OLTs a partir do .env
-│   └── env_store.py        # Leitura/escrita do .env usada pela interface web
+│   ├── env_store.py        # Leitura/escrita do .env usada pela interface web
+│   └── vendors.py          # Catálogo central de marcas, modelos e protocolos
 │
 ├── webui/                  # Interface web (cadastro de OLTs + backup manual)
 │   ├── app.py               # App Flask (login, rotas, disparo de backup)
@@ -107,16 +114,21 @@ O `run.py` é o CLI interativo para execução manual, com menu de seleção de 
 
 ---
 
-## Protocolos por Vendor
+## Modelos e protocolos homologados
 
-| Vendor | Protocolo de acesso | Protocolo de transferência |
+| Vendor/modelo | Protocolo de acesso | Protocolo de transferência |
 |---|---|---|
-| **Datacom** | Telnet | TFTP (container `tftp` deste projeto) |
-| **ZTE** | Telnet | FTP |
-| **ZTE Titan** | Telnet | FTP |
-| **Parks** | Telnet | FTP |
-| **Fiberhome** | Telnet | FTP |
-| **Huawei** | Telnet | FTP |
+| **Datacom DM4615/DM4618/DmOS** | Telnet | TFTP |
+| **ZTE C300/C320/C350** | Telnet | FTP |
+| **ZTE Titan/C600** | Telnet | FTP |
+| **Parks Fiberlink** | Telnet | FTP |
+| **Fiberhome AN5516/AN6000** | Telnet | FTP |
+| **Huawei MA5600/MA5800** | Telnet | FTP |
+| **Intelbras G16** | Telnet | FTP ou TFTP |
+
+Os três receptores ficam disponíveis no servidor. SCP/SFTP usa a porta `2222` por padrão para não conflitar com o SSH administrativo. Um protocolo só aparece como suportado por um modelo quando seu comando foi homologado no driver, evitando enviar sintaxe incompatível a uma OLT.
+
+O catálogo de runtime fica centralizado em `common/vendors.py`. Para um modelo novo, adicione a definição ao catálogo e implemente ou reutilize o driver do fabricante; CLI, scheduler, testes e painel passam a reconhecê-lo juntos.
 
 ---
 
@@ -152,7 +164,7 @@ docker compose up -d --build
 
 ## Interface Web
 
-`docker compose up -d --build` sobe três serviços: `olt-backup` (o `scheduler.py`, que dispara os backups agendados), `tftp` (recebe os backups Datacom) e `webui` (painel para cadastrar OLTs e rodar backups manualmente), este último escutando em `http://<ip-do-servidor>:8080` (porta configurável em `WEBUI_PORT`).
+O instalador sobe cinco serviços: `olt-backup` (scheduler), `webui` (painel), `tftp`, `ftp` e `sftp` (SCP/SFTP). O painel escuta em `http://<ip-do-servidor>:8080` e o instalador exibe a senha inicial gerada automaticamente.
 
 Login: usuário/senha definidos em `WEBUI_USER` / `WEBUI_PASSWORD` no `.env`. **Não exponha essa porta na internet** mesmo com login habilitado — mantenha atrás de VPN/firewall, como já se faz hoje com o acesso Telnet às próprias OLTs.
 

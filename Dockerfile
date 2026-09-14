@@ -9,7 +9,7 @@ ENV PYTHONPATH=/app
 # o botão "Parar" encerre um backup mesmo que o painel tenha perdido o
 # rastro do processo, ex.: após reiniciar o container).
 RUN apt-get update && \
-    apt-get install -y --no-install-recommends tzdata procps && \
+    apt-get install -y --no-install-recommends tzdata procps tftp-hpa openssh-client && \
     apt-get clean && \
     rm -rf /var/lib/apt/lists/*
 

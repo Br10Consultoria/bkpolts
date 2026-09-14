@@ -164,7 +164,7 @@ def main():
 
     if total == 0:
         send_message("⚠️ ZTE: nenhuma OLT configurada em ZTE_OLTS / ZTE_TITAN_OLTS")
-        return
+        return 1
 
     ts = datetime.now().strftime("%d/%m/%Y %H:%M")
     send_message(f"🚀 Iniciando backup de {total} OLT(s) ZTE — {ts}")
@@ -191,7 +191,8 @@ def main():
         f"❌ Falha ({len(fail)}): {', '.join(fail) or 'nenhum'}"
     )
     send_message(resumo)
+    return 1 if fail else 0
 
 
 if __name__ == "__main__":
-    main()
+    sys.exit(main())

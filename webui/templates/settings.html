@@ -16,12 +16,42 @@
 </div>
 
 <div class="card">
+  <h2>Servidor FTP</h2>
+  <p class="muted">O instalador sobe o receptor FTP automaticamente. Reinicie os serviços após alterar credenciais.</p>
+  <div class="row">
+    <div><label>IP</label><input type="text" name="ftp_ip" value="{{ env.get('FTP_IP', '') }}"></div>
+    <div><label>Usuário</label><input type="text" name="ftp_user" value="{{ env.get('FTP_USER', '') }}"></div>
+    <div><label>Senha</label><input type="password" name="ftp_password" value="{{ env.get('FTP_PASSWORD', '') }}"></div>
+  </div>
+</div>
+
+<div class="card">
+  <h2>Servidor SCP/SFTP</h2>
+  <p class="muted">Disponível para drivers/modelos com comandos SCP ou SFTP homologados. Porta padrão 2222 para não conflitar com o SSH do servidor.</p>
+  <div class="row">
+    <div><label>IP</label><input type="text" name="sftp_ip" value="{{ env.get('SFTP_IP', '') }}"></div>
+    <div><label>Porta</label><input type="text" name="sftp_port" value="{{ env.get('SFTP_PORT', '2222') }}"></div>
+    <div><label>Usuário</label><input type="text" name="sftp_user" value="{{ env.get('SFTP_USER', '') }}"></div>
+    <div><label>Senha</label><input type="password" name="sftp_password" value="{{ env.get('SFTP_PASSWORD', '') }}"></div>
+  </div>
+</div>
+
+<div class="card">
   <h2>Servidor de backup Datacom (TFTP)</h2>
   <p class="muted">O docker-compose já sobe um container "tftp" pronto — normalmente o IP abaixo é o IP deste mesmo servidor. Depois de mudar, rode <code>docker compose up -d --build</code> para aplicar.</p>
   <div class="row">
     <div><label>IP do servidor TFTP</label><input type="text" name="tftp_ip" value="{{ env.get('TFTP_IP', '') }}"></div>
     <div><label>Diretório no host (compartilhado com o container tftp)</label><input type="text" name="datacom_backup_dir" value="{{ env.get('DATACOM_BACKUP_DIR', '') }}"></div>
   </div>
+</div>
+
+<div class="card">
+  <h2>Intelbras G16</h2>
+  <label>Protocolo de backup homologado</label>
+  <select name="intelbras_backup_method">
+    <option value="ftp" {% if env.get('INTELBRAS_BACKUP_METHOD', 'ftp') == 'ftp' %}selected{% endif %}>FTP</option>
+    <option value="tftp" {% if env.get('INTELBRAS_BACKUP_METHOD') == 'tftp' %}selected{% endif %}>TFTP</option>
+  </select>
 </div>
 
 <div class="card">

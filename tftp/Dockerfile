@@ -12,9 +12,12 @@ RUN apt-get update && \
     apt-get clean && rm -rf /var/lib/apt/lists/* && \
     useradd --system --no-create-home --shell /usr/sbin/nologin tftpuser
 
-RUN mkdir -p /srv/tftp && chown tftpuser:tftpuser /srv/tftp
+RUN mkdir -p /srv/tftp && chmod 0777 /srv/tftp
 
 EXPOSE 69/udp
+
+COPY entrypoint.sh /entrypoint.sh
+RUN chmod 0755 /entrypoint.sh
 
 # --foreground: modo standalone SEM daemonizar (--listen sozinho solta do
 #           foreground — o processo faz fork e o pai sai com código 0, o
@@ -25,5 +28,4 @@ EXPOSE 69/udp
 # --create: permite gravar arquivos novos (sem isso, o tftpd-hpa só
 #           sobrescreve arquivos já existentes — e a OLT manda um nome novo
 #           a cada backup, com timestamp).
-ENTRYPOINT ["/usr/sbin/in.tftpd", "--foreground", "--user", "tftpuser", \
-            "--address", "0.0.0.0:69", "--secure", "--create", "/srv/tftp"]
+ENTRYPOINT ["/entrypoint.sh"]

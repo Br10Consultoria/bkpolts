@@ -23,7 +23,8 @@
 
 {% for group in groups %}
 <div class="card">
-  <h2>{{ group.label }} <span class="muted">({{ group.olts|length }} OLT(s))</span></h2>
+  <h2>{{ group.label }} <span class="badge ok">{{ group.protocols }}</span> <span class="muted">({{ group.olts|length }} OLT(s))</span></h2>
+  <p class="muted">O driver e os comandos corretos são selecionados automaticamente para este modelo.</p>
   <table>
     <tr><th>Nome</th><th>IP</th><th>Usuário</th><th>Status</th><th></th></tr>
     {% for olt in group.olts %}

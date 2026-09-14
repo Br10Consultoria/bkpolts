@@ -45,8 +45,31 @@ services:
     network_mode: host                   # TFTP negocia a transferência numa porta UDP
                                           # efêmera que não atravessa o NAT do modo bridge
 
+  ftp:
+    build:
+      context: ./ftp
+    container_name: olt-backup-ftp
+    restart: unless-stopped
+    env_file: [.env]
+    volumes:
+      - ${DATACOM_BACKUP_DIR:-backup-data}:/srv/backups
+    network_mode: host
+
+  sftp:
+    build:
+      context: ./sftp
+    container_name: olt-backup-sftp
+    restart: unless-stopped
+    env_file: [.env]
+    volumes:
+      - ${DATACOM_BACKUP_DIR:-backup-data}:/srv/backups
+      - sftp-host-keys:/ssh-keys
+    network_mode: host
+
 volumes:
   backup-data:
     driver: local
   backup-logs:
+    driver: local
+  sftp-host-keys:
     driver: local

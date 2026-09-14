@@ -121,7 +121,7 @@ def main():
     total = len(olts)
     if total == 0:
         send_message("⚠️ Huawei: nenhuma OLT configurada em HUAWEI_OLTS")
-        return
+        return 1
 
     ts = datetime.now().strftime("%d/%m/%Y %H:%M")
     send_message(f"🚀 Iniciando backup de {total} OLT(s) Huawei — {ts}")
@@ -143,7 +143,8 @@ def main():
         f"❌ Falha ({len(fail_list)}): {', '.join(fail_list) or 'nenhum'}"
     )
     send_message(resumo)
+    return 1 if fail_list else 0
 
 
 if __name__ == "__main__":
-    main()
+    sys.exit(main())

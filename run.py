@@ -17,28 +17,15 @@ import subprocess
 import argparse
 from pathlib import Path
 
+from common.vendors import vendor_labels, vendor_map
+
 BASE_DIR = Path(__file__).resolve().parent
 ENV_FILE = BASE_DIR / ".env"
 
 
 # Mapeamento de vendor → variáveis de OLT no .env
-VENDOR_MAP = {
-    "datacom":       ["DATACOM_OLTS"],
-    "zte":           ["ZTE_OLTS", "ZTE_TITAN_OLTS"],
-    "parks":         ["PARKS_OLTS"],
-    "fiberhome":     ["FIBERHOME_OLTS"],
-    "huawei":        ["HUAWEI_OLTS"],
-    "intelbras_g16": ["INTELBRAS_G16_OLTS"],
-}
-
-VENDOR_LABELS = {
-    "datacom":       "Datacom        (Telnet + TFTP)",
-    "zte":           "ZTE            (Telnet + FTP)  — padrão + Titan",
-    "parks":         "Parks          (Telnet + FTP)",
-    "fiberhome":     "Fiberhome      (Telnet + FTP)",
-    "huawei":        "Huawei         (Telnet + FTP)",
-    "intelbras_g16": "Intelbras G16  (Telnet + FTP/TFTP)",
-}
+VENDOR_MAP = vendor_map()
+VENDOR_LABELS = vendor_labels()
 
 
 # ============================================================
@@ -257,15 +244,13 @@ Exemplos:
             print("[AVISO] Nenhum vendor configurado no .env\n")
             sys.exit(0)
         print(f"  Executando {len(configured)} vendor(s) configurados...\n")
-        for vendor in configured:
-            run_vendor(vendor, env)
-        sys.exit(0)
+        codes = [run_vendor(vendor, env) for vendor in configured]
+        sys.exit(1 if any(codes) else 0)
 
     # Modo --vendor
     if args.vendor:
         env_full = load_env(ENV_FILE)
-        run_vendor(args.vendor, env_full)
-        sys.exit(0)
+        sys.exit(run_vendor(args.vendor, env_full))
 
     # Modo interativo (padrão)
     interactive_menu(env)

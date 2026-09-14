@@ -118,10 +118,12 @@ install_base_deps() {
             gnupg \
             lsb-release \
             tzdata \
-            nano
+            nano \
+            openssl \
+            iproute2
     else
-        yum install -y curl git ca-certificates gnupg2 tzdata nano 2>/dev/null || \
-        dnf install -y curl git ca-certificates gnupg2 tzdata nano
+        yum install -y curl git ca-certificates gnupg2 tzdata nano openssl iproute 2>/dev/null || \
+        dnf install -y curl git ca-certificates gnupg2 tzdata nano openssl iproute
     fi
 
     log_ok "Dependências base instaladas."
@@ -294,6 +296,97 @@ create_env_file() {
     fi
 }
 
+set_env_value() {
+    local key="$1" value="$2" file="${REPO_DIR}/.env"
+    if grep -q "^${key}=" "$file"; then
+        sed -i "s|^${key}=.*|${key}=${value}|" "$file"
+    else
+        printf '%s=%s\n' "$key" "$value" >> "$file"
+    fi
+}
+
+ensure_env_value() {
+    local key="$1" value="$2" file="${REPO_DIR}/.env"
+    if ! grep -q "^${key}=..*" "$file"; then
+        set_env_value "$key" "$value"
+    fi
+}
+
+configure_runtime() {
+    log_step "Configurando serviços e credenciais locais..."
+    local env_file="${REPO_DIR}/.env"
+    local server_ip
+    server_ip=$(ip -4 route get 1.1.1.1 2>/dev/null | awk '{for(i=1;i<=NF;i++) if($i=="src") {print $(i+1); exit}}' || true)
+    server_ip="${server_ip:-127.0.0.1}"
+
+    ensure_env_value WEBUI_SECRET_KEY "$(openssl rand -hex 32)"
+    ensure_env_value WEBUI_USER admin
+    if grep -q '^WEBUI_PASSWORD=DEFINA_UMA_SENHA_FORTE_AQUI$' "$env_file"; then
+        set_env_value WEBUI_PASSWORD "$(openssl rand -hex 12)"
+    fi
+    if grep -q '^FTP_PASSWORD=senha$' "$env_file"; then
+        set_env_value FTP_PASSWORD "$(openssl rand -hex 12)"
+    fi
+    if grep -q '^SFTP_PASSWORD=senha$' "$env_file"; then
+        set_env_value SFTP_PASSWORD "$(openssl rand -hex 12)"
+    fi
+    ensure_env_value FTP_USER oltbackup
+    ensure_env_value FTP_PASSWORD "$(openssl rand -hex 12)"
+    ensure_env_value FTP_PASV_MIN_PORT 30000
+    ensure_env_value FTP_PASV_MAX_PORT 30009
+    ensure_env_value SFTP_USER oltbackup
+    ensure_env_value SFTP_PASSWORD "$(openssl rand -hex 12)"
+    ensure_env_value SFTP_PORT 2222
+    for key in BACKUP_SERVER_IP TFTP_IP FTP_IP SFTP_IP; do
+        if ! grep -q "^${key}=..*" "$env_file" || grep -q "^${key}=0.0.0.0$" "$env_file"; then
+            set_env_value "$key" "$server_ip"
+        fi
+    done
+    chmod 0600 "$env_file"
+    log_ok "IP do servidor detectado: ${server_ip}; credenciais locais geradas."
+}
+
+configure_firewall() {
+    log_step "Configurando firewall para os serviços de backup..."
+    if command -v ufw >/dev/null 2>&1; then
+        ufw allow 8080/tcp >/dev/null
+        ufw allow 21/tcp >/dev/null
+        ufw allow 30000:30009/tcp >/dev/null
+        ufw allow 69/udp >/dev/null
+        ufw allow 2222/tcp >/dev/null
+        log_ok "Regras adicionadas ao UFW."
+    elif command -v firewall-cmd >/dev/null 2>&1 && systemctl is-active --quiet firewalld; then
+        firewall-cmd --permanent --add-port=8080/tcp >/dev/null
+        firewall-cmd --permanent --add-port=21/tcp >/dev/null
+        firewall-cmd --permanent --add-port=30000-30009/tcp >/dev/null
+        firewall-cmd --permanent --add-port=69/udp >/dev/null
+        firewall-cmd --permanent --add-port=2222/tcp >/dev/null
+        firewall-cmd --reload >/dev/null
+        log_ok "Regras adicionadas ao firewalld."
+    else
+        log_info "Nenhum firewall ativo compatível detectado; nenhuma regra necessária."
+    fi
+}
+
+deploy_services() {
+    log_step "Construindo e iniciando todos os serviços..."
+    cd "$REPO_DIR"
+    docker compose config --quiet
+    docker compose up -d --build --remove-orphans
+    sleep 3
+    if docker compose ps --status running --services | grep -qx 'olt-backup' && \
+       docker compose ps --status running --services | grep -qx 'webui' && \
+       docker compose ps --status running --services | grep -qx 'tftp' && \
+       docker compose ps --status running --services | grep -qx 'ftp' && \
+       docker compose ps --status running --services | grep -qx 'sftp'; then
+        log_ok "Scheduler, painel, TFTP, FTP e SCP/SFTP estão em execução."
+    else
+        docker compose ps
+        log_error "Um ou mais serviços não iniciaram. Consulte: docker compose logs"
+        exit 1
+    fi
+}
+
 # ============================================================
 # Verifica versões instaladas
 # ============================================================
@@ -314,30 +407,37 @@ verify_installation() {
 # ============================================================
 
 print_instructions() {
+    local panel_user panel_pass server_ip
+    panel_user=$(grep '^WEBUI_USER=' "${REPO_DIR}/.env" | cut -d= -f2-)
+    panel_pass=$(grep '^WEBUI_PASSWORD=' "${REPO_DIR}/.env" | cut -d= -f2-)
+    server_ip=$(grep '^BACKUP_SERVER_IP=' "${REPO_DIR}/.env" | cut -d= -f2-)
     echo ""
     echo -e "${CYAN}${BOLD}╔══════════════════════════════════════════════════════╗${NC}"
     echo -e "${CYAN}${BOLD}║         Ambiente pronto! Próximos passos:           ║${NC}"
     echo -e "${CYAN}${BOLD}╚══════════════════════════════════════════════════════╝${NC}"
     echo ""
-    echo -e "  ${BOLD}1. Edite o arquivo .env com suas credenciais:${NC}"
-    echo -e "     ${YELLOW}nano ${REPO_DIR}/.env${NC}"
+    echo -e "  ${BOLD}Painel:${NC} ${YELLOW}http://${server_ip}:8080${NC}"
+    echo -e "  ${BOLD}Usuário:${NC} ${panel_user}"
+    echo -e "  ${BOLD}Senha inicial:${NC} ${panel_pass}"
+    echo -e "  ${RED}Guarde a senha e altere-a no painel após o primeiro acesso.${NC}"
     echo ""
-    echo -e "  ${BOLD}2. Preencha obrigatoriamente:${NC}"
+    echo -e "  ${BOLD}Cadastre as OLTs no painel escolhendo fabricante e modelo.${NC}"
+    echo -e "  Configure também o Telegram em Configurações."
+    echo ""
+    echo -e "  ${BOLD}Configuração avançada:${NC} ${YELLOW}nano ${REPO_DIR}/.env${NC}"
+    echo -e "  ${BOLD}Variáveis principais:${NC}"
     echo -e "     ${YELLOW}VENDOR${NC}          — vendors a executar (ex: datacom,zte)"
     echo -e "     ${YELLOW}TELEGRAM_TOKEN${NC}  — token do bot Telegram"
     echo -e "     ${YELLOW}TELEGRAM_CHAT_ID${NC}— ID do chat/grupo Telegram"
     echo -e "     ${YELLOW}*_OLTS${NC}          — OLTs no formato NOME:IP:USUARIO:SENHA"
     echo ""
-    echo -e "  ${BOLD}3. Suba o container:${NC}"
-    echo -e "     ${YELLOW}cd ${REPO_DIR} && docker compose up -d --build${NC}"
-    echo ""
-    echo -e "  ${BOLD}4. Verifique os logs:${NC}"
+    echo -e "  ${BOLD}Verifique os logs:${NC}"
     echo -e "     ${YELLOW}docker logs olt-backup${NC}"
     echo ""
-    echo -e "  ${BOLD}5. Backup manual (menu interativo):${NC}"
+    echo -e "  ${BOLD}Backup manual (menu interativo):${NC}"
     echo -e "     ${YELLOW}docker exec -it olt-backup python3 /app/run.py${NC}"
     echo ""
-    echo -e "  ${BOLD}6. Backup imediato (todos os vendors):${NC}"
+    echo -e "  ${BOLD}Backup imediato (todos os vendors):${NC}"
     echo -e "     ${YELLOW}docker exec olt-backup python3 /app/scheduler.py --now${NC}"
     echo ""
     echo -e "  ${BOLD}Backups agendados automaticamente:${NC} 13:00 e 22:00 (America/Bahia)"
@@ -361,6 +461,9 @@ main() {
     configure_timezone
     clone_repository
     create_env_file
+    configure_runtime
+    configure_firewall
+    deploy_services
     verify_installation
     print_instructions
 }

@@ -7,7 +7,19 @@ import sys
 import time
 import logging
 import ftplib
+import re
 from datetime import datetime
+
+
+def redact_secrets(value: str) -> str:
+    """Remove senhas conhecidas de comandos antes de gravá-los em log."""
+    redacted = value
+    for key, secret in os.environ.items():
+        if ("PASS" in key.upper() or "TOKEN" in key.upper() or "SECRET" in key.upper()) and secret:
+            redacted = redacted.replace(secret, "****")
+    redacted = re.sub(r"(?i)(password\s+)\S+", r"\1****", redacted)
+    redacted = re.sub(r"(//[^/@:]+:)[^@]+(@)", r"\1****\2", redacted)
+    return redacted
 
 
 def setup_logging(vendor_name: str):
@@ -31,7 +43,7 @@ def setup_logging(vendor_name: str):
 def send_telnet_command(tn, command: str, wait_time: int = 2) -> str:
     """Envia um comando via Telnet e retorna a resposta."""
     log = logging.getLogger("olt-backup")
-    log.info("CMD >> %s", command)
+    log.info("CMD >> %s", redact_secrets(command))
     tn.write(command.encode("ascii") + b"\n")
     time.sleep(wait_time)
     response = tn.read_very_eager().decode("ascii", errors="replace")

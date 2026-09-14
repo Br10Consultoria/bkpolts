@@ -39,36 +39,19 @@ from common.env_store import (  # noqa: E402
     load_env, save_env, validate_olt_field, validate_olt_name,
     validate_olt_password, parse_olts_raw, serialize_olts,
 )
+from common.vendors import VENDORS, vendor_labels  # noqa: E402
 
 # Cada vendor pode ter mais de uma lista de OLTs (ex.: ZTE padrão + Titan
 # são dois grupos dentro do mesmo vendor/script). Formato:
 #   vendor: [(env_var, rótulo da seção), ...]
 VENDOR_OLT_VARS = {
-    "datacom":       [("DATACOM_OLTS", "Datacom")],
-    "zte":           [("ZTE_OLTS", "ZTE padrão"), ("ZTE_TITAN_OLTS", "ZTE Titan")],
-    "parks":         [("PARKS_OLTS", "Parks")],
-    "fiberhome":     [("FIBERHOME_OLTS", "Fiberhome")],
-    "huawei":        [("HUAWEI_OLTS", "Huawei")],
-    "intelbras_g16": [("INTELBRAS_G16_OLTS", "Intelbras G16")],
+    key: [(model["env_var"], model["label"]) for model in value["models"]]
+    for key, value in VENDORS.items()
 }
 
-VENDOR_SCRIPT = {
-    "datacom":       "datacom",
-    "zte":           "zte",
-    "parks":         "parks",
-    "fiberhome":     "fiberhome",
-    "huawei":        "huawei",
-    "intelbras_g16": "intelbras_g16",
-}
+VENDOR_SCRIPT = {key: value["driver"] for key, value in VENDORS.items()}
 
-VENDOR_LABELS = {
-    "datacom":       "Datacom (Telnet + TFTP)",
-    "zte":           "ZTE — padrão + Titan (Telnet + FTP)",
-    "parks":         "Parks (Telnet + FTP)",
-    "fiberhome":     "Fiberhome (Telnet + FTP)",
-    "huawei":        "Huawei (Telnet + FTP)",
-    "intelbras_g16": "Intelbras G16 (Telnet + FTP/TFTP)",
-}
+VENDOR_LABELS = vendor_labels()
 
 app = Flask(__name__)
 app.secret_key = os.getenv("WEBUI_SECRET_KEY") or secrets.token_hex(32)
@@ -274,10 +257,17 @@ def vendor_page(vendor):
     env = load_env(ENV_FILE)
     groups = []
     for var, section_label in VENDOR_OLT_VARS[vendor]:
+        model = next(m for m in VENDORS[vendor]["models"] if m["env_var"] == var)
         olts = parse_olts_raw(env.get(var, ""))
         for olt in olts:
             olt["running"] = is_running(job_key(vendor, olt["name"]))
-        groups.append({"var": var, "label": section_label, "olts": olts})
+        groups.append({
+            "var": var,
+            "label": section_label,
+            "model": model["key"],
+            "protocols": "/".join(p.upper() for p in model["protocols"]),
+            "olts": olts,
+        })
 
     session.setdefault("csrf", secrets.token_hex(16))
     return render_template(
@@ -422,7 +412,17 @@ def settings():
             "TELEGRAM_CHAT_ID": request.form.get("telegram_chat_id", "").strip(),
             "TFTP_IP": request.form.get("tftp_ip", "").strip(),
             "DATACOM_BACKUP_DIR": request.form.get("datacom_backup_dir", "").strip(),
+            "FTP_IP": request.form.get("ftp_ip", "").strip(),
+            "FTP_USER": request.form.get("ftp_user", "").strip(),
+            "FTP_PASSWORD": request.form.get("ftp_password", ""),
+            "SFTP_IP": request.form.get("sftp_ip", "").strip(),
+            "SFTP_PORT": request.form.get("sftp_port", "2222").strip(),
+            "SFTP_USER": request.form.get("sftp_user", "").strip(),
+            "SFTP_PASSWORD": request.form.get("sftp_password", ""),
+            "INTELBRAS_BACKUP_METHOD": request.form.get("intelbras_backup_method", "ftp"),
         }
+        if updates["INTELBRAS_BACKUP_METHOD"] not in {"ftp", "tftp"}:
+            updates["INTELBRAS_BACKUP_METHOD"] = "ftp"
 
         new_webui_pass = request.form.get("new_webui_password", "").strip()
         if new_webui_pass:

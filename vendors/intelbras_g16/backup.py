@@ -28,7 +28,7 @@ from datetime import datetime
 
 sys.path.insert(0, "/app")
 
-from common.helpers import ftp_download_rename, cleanup_file, setup_logging
+from common.helpers import ftp_download_rename, cleanup_file, setup_logging, redact_secrets
 from common.telegram import send_message, send_file
 from common.parser import parse_olts
 
@@ -46,7 +46,7 @@ UPLOAD_WAIT  = 30   # segundos aguardando o upload concluir na OLT
 def _send_cmd(tn: telnetlib.Telnet, cmd: str, wait: float = 1.0):
     """Envia um comando e aguarda um breve delay."""
     tn.write(cmd.encode("ascii") + b"\n")
-    log.info("CMD >> %s", cmd if "password" not in cmd.lower() else "****")
+    log.info("CMD >> %s", redact_secrets(cmd))
     time.sleep(wait)
 
 
@@ -162,7 +162,7 @@ def main():
     total = len(olts)
     if total == 0:
         send_message("⚠️ Intelbras G16: nenhuma OLT configurada em INTELBRAS_G16_OLTS")
-        return
+        return 1
 
     ts = datetime.now().strftime("%d/%m/%Y %H:%M")
     send_message(
@@ -187,7 +187,8 @@ def main():
         f"❌ Falha ({len(fail_list)}): {', '.join(fail_list) or 'nenhum'}"
     )
     send_message(resumo)
+    return 1 if fail_list else 0
 
 
 if __name__ == "__main__":
-    main()
+    sys.exit(main())

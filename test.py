@@ -23,6 +23,8 @@ import subprocess
 from pathlib import Path
 from datetime import datetime
 
+from common.vendors import vendor_map
+
 BASE_DIR = Path(__file__).resolve().parent
 ENV_FILE = BASE_DIR / ".env"
 
@@ -34,13 +36,7 @@ CYAN   = "\033[0;36m"
 BOLD   = "\033[1m"
 NC     = "\033[0m"
 
-VENDOR_MAP = {
-    "datacom":   ["DATACOM_OLTS"],
-    "zte":       ["ZTE_OLTS", "ZTE_TITAN_OLTS"],
-    "parks":     ["PARKS_OLTS"],
-    "fiberhome": ["FIBERHOME_OLTS"],
-    "huawei":    ["HUAWEI_OLTS"],
-}
+VENDOR_MAP = vendor_map()
 
 REQUIRED_VARS = {
     "TELEGRAM_TOKEN":   "Token do bot Telegram",
@@ -53,6 +49,7 @@ VENDOR_REQUIRED_VARS = {
     "parks":     ["FTP_IP", "FTP_USER", "FTP_PASSWORD", "PARKS_OLTS"],
     "fiberhome": ["FTP_IP", "FTP_USER", "FTP_PASSWORD", "FIBERHOME_OLTS"],
     "huawei":    ["FTP_IP", "FTP_USER", "FTP_PASSWORD", "HUAWEI_OLTS"],
+    "intelbras_g16": ["INTELBRAS_G16_OLTS"],
 }
 
 # ============================================================

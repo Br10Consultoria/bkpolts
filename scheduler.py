@@ -22,6 +22,8 @@ from datetime import datetime
 from pathlib import Path
 from zoneinfo import ZoneInfo
 
+from common.vendors import vendor_map
+
 # ============================================================
 # Configuração de paths
 # ============================================================
@@ -31,14 +33,7 @@ ENV_FILE = BASE_DIR / ".env"
 LOG_FILE = BASE_DIR / "logs" / "scheduler.log"
 
 # Mapeamento de vendor → variáveis de OLT no .env
-VENDOR_MAP = {
-    "datacom":       ["DATACOM_OLTS"],
-    "zte":           ["ZTE_OLTS", "ZTE_TITAN_OLTS"],
-    "parks":         ["PARKS_OLTS"],
-    "fiberhome":     ["FIBERHOME_OLTS"],
-    "huawei":        ["HUAWEI_OLTS"],
-    "intelbras_g16": ["INTELBRAS_G16_OLTS"],
-}
+VENDOR_MAP = vendor_map()
 
 # ============================================================
 # Logging
@@ -116,7 +111,7 @@ def run_vendor(vendor: str, env: dict):
     script = BASE_DIR / "vendors" / vendor / "backup.py"
     if not script.exists():
         log.error("Script não encontrado: %s", script)
-        return
+        return 1
 
     log.info("Iniciando backup: %s", vendor.upper())
     merged_env = {**os.environ, **env}
@@ -129,6 +124,7 @@ def run_vendor(vendor: str, env: dict):
         log.info("Backup %s concluído com sucesso", vendor.upper())
     else:
         log.warning("Backup %s encerrou com código %d", vendor.upper(), result.returncode)
+    return result.returncode
 
 
 def run_all_vendors(env: dict):
@@ -136,11 +132,11 @@ def run_all_vendors(env: dict):
     vendors = get_configured_vendors(env)
     if not vendors:
         log.warning("Nenhum vendor configurado no .env")
-        return
+        return 1
     log.info("Executando %d vendor(s): %s", len(vendors), ", ".join(vendors))
-    for vendor in vendors:
-        run_vendor(vendor, env)
+    failures = [vendor for vendor in vendors if run_vendor(vendor, env) != 0]
     log.info("Ciclo de backup concluído.")
+    return 1 if failures else 0
 
 
 def print_banner(env: dict, tz: ZoneInfo, h1: int, h2: int, vendors: list):
@@ -259,8 +255,7 @@ Exemplos:
 
     if args.now:
         log.info("Modo --now: executando todos os vendors imediatamente...")
-        run_all_vendors(env)
-        sys.exit(0)
+        sys.exit(run_all_vendors(env))
 
     # Modo --test
     if args.test:
