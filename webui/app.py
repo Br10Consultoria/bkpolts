@@ -21,14 +21,16 @@ Variáveis de ambiente:
 """
 
 import os
+import json
 import secrets
 import subprocess
 import sys
 import threading
+import time
 from functools import wraps
 from pathlib import Path
 
-from flask import Flask, flash, redirect, render_template, request, session, url_for
+from flask import Flask, Response, flash, redirect, render_template, request, session, stream_with_context, url_for
 
 BASE_DIR = Path(__file__).resolve().parent.parent
 ENV_FILE = BASE_DIR / ".env"
@@ -258,6 +260,11 @@ def tail_log(vendor: str, lines: int = 60) -> str:
     with open(log_file, encoding="utf-8", errors="replace") as f:
         content = f.readlines()
     return "".join(content[-lines:])
+
+
+def vendor_log_path(vendor: str) -> Path:
+    script_vendor = VENDOR_SCRIPT.get(vendor, vendor)
+    return LOG_DIR / f"backup_{script_vendor}.log"
 
 
 # ============================================================
@@ -514,6 +521,48 @@ def vendor_clear_logs(vendor):
     log_file.write_text("", encoding="utf-8")
     flash("Log limpo.", "success")
     return redirect(url_for("vendor_page", vendor=vendor))
+
+
+@app.route("/vendor/<vendor>/logs/stream")
+@login_required
+def vendor_log_stream(vendor):
+    """Entrega somente as novas linhas do log por Server-Sent Events."""
+    if vendor not in VENDOR_OLT_VARS:
+        return Response(status=404)
+    log_file = vendor_log_path(vendor)
+
+    @stream_with_context
+    def generate():
+        position = log_file.stat().st_size if log_file.exists() else 0
+        last_heartbeat = time.monotonic()
+        while True:
+            try:
+                if log_file.exists():
+                    size = log_file.stat().st_size
+                    if size < position:  # log limpo/rotacionado
+                        position = 0
+                    if size > position:
+                        with open(log_file, encoding="utf-8", errors="replace") as handle:
+                            handle.seek(position)
+                            chunk = handle.read()
+                            position = handle.tell()
+                        if chunk:
+                            yield f"data: {json.dumps({'text': chunk}, ensure_ascii=False)}\n\n"
+                            last_heartbeat = time.monotonic()
+                if time.monotonic() - last_heartbeat >= 15:
+                    yield ": heartbeat\n\n"
+                    last_heartbeat = time.monotonic()
+                time.sleep(0.5)
+            except GeneratorExit:
+                return
+            except OSError:
+                time.sleep(1)
+
+    return Response(
+        generate(),
+        mimetype="text/event-stream",
+        headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
+    )
 
 
 @app.route("/settings", methods=["GET", "POST"])

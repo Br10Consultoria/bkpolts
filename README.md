@@ -173,7 +173,7 @@ O que dá pra fazer pelo painel:
 - Editar nome, IP, usuário e senha de uma OLT sem recriar o cadastro.
 - Ativar ou desativar individualmente uma OLT; equipamentos desativados são preservados, mas ignorados pelo scheduler e pelos backups manuais.
 - Disparar o backup de uma OLT específica ou de todas as OLTs de um vendor, sem esperar o horário agendado.
-- Acompanhar o log da última execução de cada vendor, e limpar esse log quando quiser.
+- Acompanhar o log de cada vendor em tempo real, incluindo login, comandos, respostas e erros, sem precisar atualizar a página; também é possível limpar o log.
 - Parar ou forçar a parada de um backup travado. O sinal de cancelamento e o estado são compartilhados entre Web UI, scheduler e CLI; o status obsoleto é removido automaticamente se um container cair. A sessão na OLT pode levar alguns segundos para encerrar.
 - Editar Telegram e o `TFTP_IP`/diretório de backup do Datacom.
 

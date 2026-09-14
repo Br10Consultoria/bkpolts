@@ -47,7 +47,7 @@ def write(tn: telnetlib.Telnet, cmd: str):
 def read_until(tn: telnetlib.Telnet, expected: bytes, timeout: int = TIMEOUT) -> str:
     """Aguarda um prompt e retorna o texto recebido."""
     data = tn.read_until(expected, timeout=timeout).decode("ascii", errors="ignore")
-    log.info("RESP << %s", data.strip()[:200])
+    log.info("RESP << %s", redact_secrets(data.strip())[:200])
     return data
 
 
@@ -99,7 +99,7 @@ def backup_fiberhome(olt: dict, progresso: str) -> bool:
         # Lê resposta final (Finished. / You've successfully...)
         resp = tn.read_very_eager().decode("ascii", errors="ignore")
         if resp.strip():
-            log.info("RESP << %s", resp.strip()[:300])
+            log.info("RESP << %s", redact_secrets(resp.strip())[:300])
 
         # ── Encerra sessão ─────────────────────────────────────────
         write(tn, "exit")

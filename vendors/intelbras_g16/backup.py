@@ -88,7 +88,7 @@ def backup_intelbras_g16(olt: dict, progresso: str) -> bool:
             log.info("Método: local (copy running-config startup-config)")
             _send_cmd(tn, "copy running-config startup-config", wait=5)
             resp = tn.read_very_eager().decode("ascii", errors="ignore")
-            log.info("RESP << %s", resp.strip()[:300])
+            log.info("RESP << %s", redact_secrets(resp.strip())[:300])
             send_message(f"✅ {progresso} {name} — configuração salva localmente (startup-config)")
             tn.write(b"exit\n")
             tn.close()
@@ -116,7 +116,7 @@ def backup_intelbras_g16(olt: dict, progresso: str) -> bool:
 
         resp = tn.read_very_eager().decode("ascii", errors="ignore")
         if resp.strip():
-            log.info("RESP << %s", resp.strip()[:300])
+            log.info("RESP << %s", redact_secrets(resp.strip())[:300])
 
         # ── Encerra sessão ─────────────────────────────────────────
         tn.write(b"exit\n")

@@ -95,12 +95,34 @@
 {% endfor %}
 
 <div class="card">
-  <h2>Log recente</h2>
-  <pre class="log">{{ log_text }}</pre>
+  <h2>Log em tempo real <span id="log-status" class="badge warn">conectando…</span></h2>
+  <pre id="live-log" class="log">{{ log_text }}</pre>
   <a class="muted" href="{{ url_for('vendor_page', vendor=vendor) }}">atualizar</a>
   <form method="post" action="{{ url_for('vendor_clear_logs', vendor=vendor) }}" style="display:inline; margin-left:12px;" onsubmit="return confirm('Limpar o log deste vendor? Não dá pra desfazer.');">
     <input type="hidden" name="csrf" value="{{ csrf }}">
     <button type="submit" class="secondary">Limpar log</button>
   </form>
 </div>
+<script>
+(() => {
+  const box = document.getElementById('live-log');
+  const status = document.getElementById('log-status');
+  box.scrollTop = box.scrollHeight;
+  const source = new EventSource({{ url_for('vendor_log_stream', vendor=vendor)|tojson }});
+  source.onopen = () => {
+    status.textContent = 'ao vivo';
+    status.className = 'badge ok';
+  };
+  source.onmessage = (event) => {
+    const payload = JSON.parse(event.data);
+    box.textContent += payload.text;
+    if (box.textContent.length > 120000) box.textContent = box.textContent.slice(-100000);
+    box.scrollTop = box.scrollHeight;
+  };
+  source.onerror = () => {
+    status.textContent = 'reconectando…';
+    status.className = 'badge warn';
+  };
+})();
+</script>
 {% endblock %}

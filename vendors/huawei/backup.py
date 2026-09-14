@@ -24,7 +24,7 @@ from datetime import datetime
 
 sys.path.insert(0, "/app")
 
-from common.helpers import ftp_download_rename, cleanup_file, setup_logging
+from common.helpers import ftp_download_rename, cleanup_file, setup_logging, redact_secrets
 from common.telegram import send_message, send_file
 from common.parser import parse_olts
 
@@ -88,7 +88,7 @@ def backup_huawei(olt: dict, progresso: str) -> bool:
         # Lê resposta final
         resp = tn.read_very_eager().decode("ascii", errors="ignore")
         if resp.strip():
-            log.info("RESP << %s", resp.strip()[:300])
+            log.info("RESP << %s", redact_secrets(resp.strip())[:300])
 
         # ── Encerra sessão ─────────────────────────────────────────
         tn.write(b"exit\n")

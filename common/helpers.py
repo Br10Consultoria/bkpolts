@@ -48,7 +48,7 @@ def send_telnet_command(tn, command: str, wait_time: int = 2) -> str:
     time.sleep(wait_time)
     response = tn.read_very_eager().decode("ascii", errors="replace")
     if response.strip():
-        log.info("RESP << %s", response.strip()[:500])
+        log.info("RESP << %s", redact_secrets(response.strip())[:500])
     return response
 
 
