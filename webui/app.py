@@ -40,6 +40,9 @@ from common.env_store import (  # noqa: E402
     validate_olt_password, parse_olts_raw, serialize_olts,
 )
 from common.vendors import VENDORS, vendor_labels  # noqa: E402
+from common.job_control import (  # noqa: E402
+    finish_job, is_cancelled, read_job, request_cancel, start_job, terminate_process, touch_job,
+)
 
 # Cada vendor pode ter mais de uma lista de OLTs (ex.: ZTE padrão + Titan
 # são dois grupos dentro do mesmo vendor/script). Formato:
@@ -141,16 +144,42 @@ def is_running(key: str) -> bool:
 
 def is_vendor_busy(vendor: str) -> bool:
     """True se o vendor inteiro OU qualquer OLT dele tiver um backup rodando."""
-    if is_running(vendor):
+    if read_job(vendor) or is_running(vendor):
         return True
     with _jobs_lock:
         keys = [k for k in _running_jobs if k.startswith(f"{vendor}:")]
     return any(is_running(k) for k in keys)
 
 
+def disabled_names(env: dict, list_var: str) -> set[str]:
+    return {name.strip() for name in env.get(f"{list_var}_DISABLED", "").split(",") if name.strip()}
+
+
+def save_disabled(list_var: str, names: set[str]):
+    save_env(ENV_FILE, {f"{list_var}_DISABLED": ",".join(sorted(names))})
+
+
+def _watch_job(vendor: str, key: str, proc: subprocess.Popen, job_id: str):
+    """Monitora processo web e atende cancelamento gravado pelo outro container."""
+    try:
+        while proc.poll() is None:
+            touch_job(vendor, job_id)
+            if is_cancelled(vendor):
+                terminate_process(proc)
+                break
+            threading.Event().wait(0.5)
+    finally:
+        finish_job(vendor, job_id)
+        with _jobs_lock:
+            if _running_jobs.get(key) is proc:
+                _running_jobs.pop(key, None)
+
+
 def start_backup(vendor: str, olt_name: str | None = None) -> bool:
     """Dispara vendors/<script>/backup.py em background. Retorna False se já rodando."""
     key = job_key(vendor, olt_name)
+    if is_vendor_busy(vendor):
+        return False
     with _jobs_lock:
         proc = _running_jobs.get(key)
         if proc is not None and proc.poll() is None:
@@ -163,12 +192,20 @@ def start_backup(vendor: str, olt_name: str | None = None) -> bool:
         else:
             env.pop("OLT_ONLY", None)
 
-        proc = subprocess.Popen(
-            [sys.executable, str(script)],
-            env=env,
-            cwd=str(BASE_DIR),
-        )
+        job_id = start_job(vendor, source="webui", target=olt_name)
+        try:
+            proc = subprocess.Popen(
+                [sys.executable, str(script)],
+                env=env,
+                cwd=str(BASE_DIR),
+            )
+        except Exception:
+            finish_job(vendor, job_id)
+            raise
         _running_jobs[key] = proc
+        threading.Thread(
+            target=_watch_job, args=(vendor, key, proc, job_id), daemon=True
+        ).start()
     return True
 
 
@@ -199,21 +236,18 @@ def stop_backup(vendor: str, olt_name: str | None = None) -> bool:
     timeout dela — isso é inerente a interromper no meio, não tem como
     fechar "com educação" um processo que já pode estar travado."""
     key = job_key(vendor, olt_name)
+    active = is_vendor_busy(vendor)
+    request_cancel(vendor)
     stopped_tracked = False
     with _jobs_lock:
         proc = _running_jobs.get(key)
         if proc is not None and proc.poll() is None:
-            proc.terminate()
-            try:
-                proc.wait(timeout=5)
-            except subprocess.TimeoutExpired:
-                proc.kill()
-                proc.wait(timeout=5)
+            terminate_process(proc)
             stopped_tracked = True
         _running_jobs.pop(key, None)
 
     stopped_pkill = _pkill_vendor_script(vendor)
-    return stopped_tracked or stopped_pkill
+    return True
 
 
 def tail_log(vendor: str, lines: int = 60) -> str:
@@ -239,7 +273,7 @@ def dashboard():
             "key": key,
             "label": VENDOR_LABELS[key],
             "count": count_olts(env, key),
-            "running": is_running(key),
+            "running": is_vendor_busy(key),
         }
         for key in VENDOR_OLT_VARS
     ]
@@ -255,12 +289,18 @@ def vendor_page(vendor):
         return redirect(url_for("dashboard"))
 
     env = load_env(ENV_FILE)
+    shared_job = read_job(vendor)
     groups = []
     for var, section_label in VENDOR_OLT_VARS[vendor]:
         model = next(m for m in VENDORS[vendor]["models"] if m["env_var"] == var)
         olts = parse_olts_raw(env.get(var, ""))
+        disabled = disabled_names(env, var)
         for olt in olts:
-            olt["running"] = is_running(job_key(vendor, olt["name"]))
+            olt["enabled"] = olt["name"] not in disabled
+            olt["running"] = (
+                is_running(job_key(vendor, olt["name"]))
+                or bool(shared_job and shared_job.get("target") == olt["name"])
+            )
         groups.append({
             "var": var,
             "label": section_label,
@@ -275,7 +315,7 @@ def vendor_page(vendor):
         vendor=vendor,
         label=VENDOR_LABELS[vendor],
         groups=groups,
-        vendor_running=is_running(vendor),
+        vendor_running=is_vendor_busy(vendor),
         log_text=tail_log(vendor),
         csrf=session["csrf"],
     )
@@ -320,6 +360,9 @@ def vendor_add(vendor):
 
     olts.append({"name": name, "ip": ip, "user": user, "password": password})
     save_env(ENV_FILE, {list_var: serialize_olts(olts)})
+    disabled = disabled_names(env, list_var)
+    disabled.discard(name)
+    save_disabled(list_var, disabled)
     flash(f"OLT '{name}' cadastrada.", "success")
     return redirect(url_for("vendor_page", vendor=vendor))
 
@@ -340,7 +383,85 @@ def vendor_delete(vendor, name):
     olts = parse_olts_raw(env.get(list_var, ""))
     remaining = [o for o in olts if o["name"] != name]
     save_env(ENV_FILE, {list_var: serialize_olts(remaining)})
+    disabled = disabled_names(env, list_var)
+    disabled.discard(name)
+    save_disabled(list_var, disabled)
     flash(f"OLT '{name}' removida.", "success")
+    return redirect(url_for("vendor_page", vendor=vendor))
+
+
+@app.route("/vendor/<vendor>/toggle/<name>", methods=["POST"])
+@login_required
+def vendor_toggle(vendor, name):
+    if vendor not in VENDOR_OLT_VARS or not check_csrf():
+        return redirect(url_for("vendor_page", vendor=vendor))
+    list_var = request.form.get("list_var", "")
+    allowed_vars = {var for var, _label in VENDOR_OLT_VARS[vendor]}
+    if list_var not in allowed_vars:
+        flash("Modelo inválido.", "error")
+        return redirect(url_for("vendor_page", vendor=vendor))
+    env = load_env(ENV_FILE)
+    if not any(o["name"] == name for o in parse_olts_raw(env.get(list_var, ""))):
+        flash("OLT não encontrada.", "error")
+        return redirect(url_for("vendor_page", vendor=vendor))
+    disabled = disabled_names(env, list_var)
+    if name in disabled:
+        disabled.remove(name)
+        message = f"OLT '{name}' ativada."
+    else:
+        disabled.add(name)
+        message = f"OLT '{name}' desativada; ela será ignorada nos backups."
+    save_disabled(list_var, disabled)
+    flash(message, "success")
+    return redirect(url_for("vendor_page", vendor=vendor))
+
+
+@app.route("/vendor/<vendor>/edit/<name>", methods=["GET", "POST"])
+@login_required
+def vendor_edit(vendor, name):
+    if vendor not in VENDOR_OLT_VARS:
+        return redirect(url_for("dashboard"))
+    list_var = request.values.get("list_var", "")
+    allowed_vars = {var for var, _label in VENDOR_OLT_VARS[vendor]}
+    if list_var not in allowed_vars:
+        flash("Modelo inválido.", "error")
+        return redirect(url_for("vendor_page", vendor=vendor))
+    env = load_env(ENV_FILE)
+    olts = parse_olts_raw(env.get(list_var, ""))
+    olt = next((o for o in olts if o["name"] == name), None)
+    if not olt:
+        flash("OLT não encontrada.", "error")
+        return redirect(url_for("vendor_page", vendor=vendor))
+    session.setdefault("csrf", secrets.token_hex(16))
+    if request.method == "GET":
+        model_label = dict(VENDOR_OLT_VARS[vendor])[list_var]
+        return render_template("olt_edit.html", vendor=vendor, olt=olt,
+                               list_var=list_var, model_label=model_label, csrf=session["csrf"])
+    if not check_csrf():
+        return redirect(url_for("vendor_page", vendor=vendor))
+    new_name = request.form.get("name", "").strip()
+    ip = request.form.get("ip", "").strip()
+    user = request.form.get("user", "").strip()
+    password = request.form.get("password", "") or olt["password"]
+    errors = [validate_olt_name(new_name)]
+    errors.extend(validate_olt_field(value, label) for value, label in [(ip, "IP"), (user, "Usuário")])
+    errors.append(validate_olt_password(password))
+    error = next((item for item in errors if item), None)
+    if error:
+        flash(error, "error")
+        return redirect(url_for("vendor_edit", vendor=vendor, name=name, list_var=list_var))
+    if new_name != name and any(o["name"] == new_name for o in olts):
+        flash(f"Já existe uma OLT chamada '{new_name}'.", "error")
+        return redirect(url_for("vendor_edit", vendor=vendor, name=name, list_var=list_var))
+    index = next(i for i, item in enumerate(olts) if item["name"] == name)
+    olts[index] = {"name": new_name, "ip": ip, "user": user, "password": password}
+    save_env(ENV_FILE, {list_var: serialize_olts(olts)})
+    disabled = disabled_names(env, list_var)
+    if name in disabled:
+        disabled.remove(name)
+        disabled.add(new_name)
+        save_disabled(list_var, disabled)
+    flash(f"OLT '{new_name}' atualizada.", "success")
     return redirect(url_for("vendor_page", vendor=vendor))
 
 
@@ -368,11 +489,9 @@ def vendor_stop(vendor):
     olt_name = request.form.get("olt_name") or None
     if stop_backup(vendor, olt_name):
         flash(
-            f"Backup de {vendor} interrompido neste container (webui). A sessão pode "
-            f"continuar aberta na OLT até o timeout dela — espere um pouco antes de "
-            f"tentar de novo. Se o agendador automático (container olt-backup) também "
-            f"estiver rodando esse vendor, isso aqui não o alcança — use "
-            f"'docker exec olt-backup pkill -f backup.py' nesse caso.",
+            f"Cancelamento solicitado para {vendor}. O painel, o scheduler e a execução "
+            f"manual compartilham esse sinal. A sessão na OLT pode levar alguns segundos "
+            f"para encerrar após a interrupção.",
             "success",
         )
     else:

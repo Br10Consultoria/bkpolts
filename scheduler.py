@@ -23,6 +23,7 @@ from pathlib import Path
 from zoneinfo import ZoneInfo
 
 from common.vendors import vendor_map
+from common.job_control import finish_job, is_cancelled, start_job, terminate_process, touch_job
 
 # ============================================================
 # Configuração de paths
@@ -115,16 +116,29 @@ def run_vendor(vendor: str, env: dict):
 
     log.info("Iniciando backup: %s", vendor.upper())
     merged_env = {**os.environ, **env}
-    result = subprocess.run(
+    job_id = start_job(vendor, source="scheduler")
+    proc = subprocess.Popen(
         [sys.executable, str(script)],
         env=merged_env,
         cwd=str(BASE_DIR),
     )
-    if result.returncode == 0:
+    try:
+        while proc.poll() is None:
+            touch_job(vendor, job_id)
+            if is_cancelled(vendor):
+                log.warning("Cancelamento solicitado para %s", vendor.upper())
+                terminate_process(proc)
+                return 130
+            time.sleep(1)
+        returncode = proc.returncode
+    finally:
+        finish_job(vendor, job_id)
+
+    if returncode == 0:
         log.info("Backup %s concluído com sucesso", vendor.upper())
     else:
-        log.warning("Backup %s encerrou com código %d", vendor.upper(), result.returncode)
-    return result.returncode
+        log.warning("Backup %s encerrou com código %d", vendor.upper(), returncode)
+    return returncode
 
 
 def run_all_vendors(env: dict):

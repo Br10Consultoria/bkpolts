@@ -50,5 +50,14 @@ def parse_olts(env_var: str) -> list[dict]:
         olts = [o for o in olts if o["name"] == only]
         log.info("OLT_ONLY=%s definido — filtrando para %d OLT(s)", only, len(olts))
 
+    disabled = {
+        name.strip() for name in os.getenv(f"{env_var}_DISABLED", "").split(",")
+        if name.strip()
+    }
+    if disabled:
+        before = len(olts)
+        olts = [o for o in olts if o["name"] not in disabled]
+        log.info("%d OLT(s) desativada(s) ignorada(s) em %s", before - len(olts), env_var)
+
     log.info("Parsed %d OLT(s) de %s", len(olts), env_var)
     return olts

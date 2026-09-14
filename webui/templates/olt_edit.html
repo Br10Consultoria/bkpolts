@@ -1,0 +1,25 @@
+{% extends "base.html" %}
+{% block title %}Editar {{ olt.name }}{% endblock %}
+{% block content %}
+<p><a class="muted" href="{{ url_for('vendor_page', vendor=vendor) }}">&larr; voltar</a></p>
+<h1>Editar OLT — {{ model_label }}</h1>
+
+<div class="card">
+  <form method="post">
+    <input type="hidden" name="csrf" value="{{ csrf }}">
+    <input type="hidden" name="list_var" value="{{ list_var }}">
+    <label>Nome</label>
+    <input type="text" name="name" value="{{ olt.name }}" required>
+    <label>IP</label>
+    <input type="text" name="ip" value="{{ olt.ip }}" required>
+    <label>Usuário</label>
+    <input type="text" name="user" value="{{ olt.user }}" required>
+    <label>Nova senha</label>
+    <input type="password" name="password" placeholder="Deixe em branco para manter a senha atual">
+    <div style="margin-top:16px;">
+      <button type="submit">Salvar alterações</button>
+      <a class="btn secondary" href="{{ url_for('vendor_page', vendor=vendor) }}">Cancelar</a>
+    </div>
+  </form>
+</div>
+{% endblock %}

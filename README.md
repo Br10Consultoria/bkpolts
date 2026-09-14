@@ -170,10 +170,11 @@ Login: usuário/senha definidos em `WEBUI_USER` / `WEBUI_PASSWORD` no `.env`. **
 
 O que dá pra fazer pelo painel:
 - Cadastrar, listar e remover OLTs por vendor (grava direto no `.env`, mesmo formato `NOME:IP:USUARIO:SENHA` usado pelo resto do projeto).
+- Editar nome, IP, usuário e senha de uma OLT sem recriar o cadastro.
+- Ativar ou desativar individualmente uma OLT; equipamentos desativados são preservados, mas ignorados pelo scheduler e pelos backups manuais.
 - Disparar o backup de uma OLT específica ou de todas as OLTs de um vendor, sem esperar o horário agendado.
 - Acompanhar o log da última execução de cada vendor, e limpar esse log quando quiser.
-- Parar um backup em execução (vendor inteiro ou uma OLT específica) — útil se travar por causa de rede ou de uma OLT sem resposta. Mata tanto o processo que o próprio painel rastreou quanto qualquer outro `backup.py` daquele vendor rodando no mesmo container (via `pkill`), então funciona mesmo se o painel tiver perdido o rastro (ex.: reiniciou). A sessão pode ficar pendurada na OLT até o timeout dela, mas o processo do lado do servidor é encerrado na hora.
-  **Limite importante:** isso só alcança processos dentro do container `webui`. O agendador automático (container `olt-backup`, que roda às 13h/22h) é outro processo, em outro container — para matar um backup travado que ele iniciou, use `docker exec olt-backup pkill -f backup.py`.
+- Parar ou forçar a parada de um backup travado. O sinal de cancelamento e o estado são compartilhados entre Web UI, scheduler e CLI; o status obsoleto é removido automaticamente se um container cair. A sessão na OLT pode levar alguns segundos para encerrar.
 - Editar Telegram e o `TFTP_IP`/diretório de backup do Datacom.
 
 Se quiser rodar sem Docker (ex.: pra debugar): `python3 webui/app.py` (lê o `.env` da raiz do projeto).

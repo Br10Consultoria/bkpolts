@@ -15,9 +15,11 @@ import os
 import sys
 import subprocess
 import argparse
+import time
 from pathlib import Path
 
 from common.vendors import vendor_labels, vendor_map
+from common.job_control import finish_job, is_cancelled, start_job, terminate_process, touch_job
 
 BASE_DIR = Path(__file__).resolve().parent
 ENV_FILE = BASE_DIR / ".env"
@@ -79,18 +81,30 @@ def run_vendor(vendor: str, env: dict):
     print(f"  OLTs configuradas: {count_olts(env, vendor)}")
     print(f"{'='*56}\n")
 
-    result = subprocess.run(
+    job_id = start_job(vendor, source="cli")
+    proc = subprocess.Popen(
         [sys.executable, str(script)],
         env=merged_env,
         cwd=str(BASE_DIR),
     )
+    try:
+        while proc.poll() is None:
+            touch_job(vendor, job_id)
+            if is_cancelled(vendor):
+                print(f"\n[AVISO] Cancelamento solicitado para {vendor}.")
+                terminate_process(proc)
+                return 130
+            time.sleep(1)
+        returncode = proc.returncode
+    finally:
+        finish_job(vendor, job_id)
 
-    if result.returncode == 0:
+    if returncode == 0:
         print(f"\n[OK] Backup {vendor} finalizado com sucesso.")
     else:
-        print(f"\n[AVISO] Backup {vendor} finalizado com código {result.returncode}.")
+        print(f"\n[AVISO] Backup {vendor} finalizado com código {returncode}.")
 
-    return result.returncode
+    return returncode
 
 
 def print_banner():
