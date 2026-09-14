@@ -387,6 +387,34 @@ deploy_services() {
     fi
 }
 
+import_initial_inventory() {
+    local env_file="${REPO_DIR}/.env"
+    local inventory_file="${REPO_DIR}/inventory/initial_olts.json"
+    if [[ ! -f "$inventory_file" ]] || grep -q '^INITIAL_INVENTORY_IMPORTED=1$' "$env_file"; then
+        return 0
+    fi
+    log_step "Importando inventário inicial de OLTs..."
+    if [[ ! -r /dev/tty ]]; then
+        log_warn "Terminal interativo indisponível; inventário não importado."
+        log_warn "Execute depois: python3 import_inventory.py inventory/initial_olts.json --username bkpolt"
+        return 0
+    fi
+    local olt_password
+    read -r -s -p "Senha das OLTs para o usuário bkpolt: " olt_password </dev/tty
+    echo ""
+    if [[ -z "$olt_password" ]]; then
+        log_warn "Senha vazia; inventário não importado."
+        return 0
+    fi
+    printf '%s\n' "$olt_password" | docker compose run --rm -T \
+        --entrypoint python3 olt-backup /app/import_inventory.py \
+        /app/inventory/initial_olts.json --username bkpolt --password-stdin
+    unset olt_password
+    set_env_value INITIAL_INVENTORY_IMPORTED 1
+    chmod 0600 "$env_file"
+    log_ok "20 OLTs Datacom, ZTE e Huawei processadas sem duplicar IPs."
+}
+
 # ============================================================
 # Verifica versões instaladas
 # ============================================================
@@ -464,6 +492,7 @@ main() {
     configure_runtime
     configure_firewall
     deploy_services
+    import_initial_inventory
     verify_installation
     print_instructions
 }

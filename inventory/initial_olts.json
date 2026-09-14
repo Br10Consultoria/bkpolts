@@ -1,0 +1,25 @@
+{
+  "username": "bkpolt",
+  "devices": [
+    {"name": "BARREIRO_1", "ip": "10.10.10.34", "vendor": "datacom", "model": "dmos"},
+    {"name": "BARREIRO_2", "ip": "10.10.10.38", "vendor": "datacom", "model": "dmos"},
+    {"name": "DATACOM_CATU_01", "ip": "10.10.10.10", "vendor": "datacom", "model": "dmos"},
+    {"name": "DATACOM_CATU_02", "ip": "10.10.10.246", "vendor": "datacom", "model": "dmos"},
+    {"name": "DATACOM_CATU_03", "ip": "10.100.10.250", "vendor": "datacom", "model": "dmos"},
+    {"name": "DATACOM_PEDRAO", "ip": "10.10.10.26", "vendor": "datacom", "model": "dmos"},
+    {"name": "OLT_DATACOM_OURICANGUINHAS", "ip": "10.10.10.30", "vendor": "datacom", "model": "dmos"},
+    {"name": "OLT_POP_FORMIGA", "ip": "10.10.10.6", "vendor": "datacom", "model": "dmos"},
+    {"name": "OLT_POP_PEDRA_FURADA", "ip": "10.10.100.2", "vendor": "datacom", "model": "dmos"},
+    {"name": "OLT_POP_COQUEIRO", "ip": "10.100.10.210", "vendor": "datacom", "model": "dmos"},
+    {"name": "PEDRO_BRAGA_NOVA", "ip": "10.100.10.54", "vendor": "datacom", "model": "dmos"},
+    {"name": "SAO_FELIX_1", "ip": "10.100.10.14", "vendor": "datacom", "model": "dmos"},
+    {"name": "SAO_FELIX_2", "ip": "10.100.10.26", "vendor": "datacom", "model": "dmos"},
+    {"name": "OLT_ZTE_ARAMARI", "ip": "10.100.11.2", "vendor": "zte", "model": "c3xx"},
+    {"name": "OLT_ZTE_CAMBUBE", "ip": "10.11.10.30", "vendor": "zte", "model": "c3xx"},
+    {"name": "OLT_ZTE_CATU_URBIS_C300", "ip": "10.10.10.242", "vendor": "zte", "model": "c3xx"},
+    {"name": "ZTE_CANAVIEIRAS", "ip": "10.100.11.10", "vendor": "zte", "model": "titan"},
+    {"name": "ZTE_PEDRAO_FORMIGA", "ip": "10.100.10.10", "vendor": "zte", "model": "c3xx"},
+    {"name": "ZTE_TITAN_OURICANGA_C610", "ip": "10.100.10.6", "vendor": "zte", "model": "titan"},
+    {"name": "HUAWEI_POP_AGUA_FRIA", "ip": "10.100.10.18", "vendor": "huawei", "model": "ma5xxx"}
+  ]
+}

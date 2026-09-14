@@ -36,11 +36,20 @@ O script realiza automaticamente:
 | 10 | Configura UFW/firewalld quando presente |
 | 11 | Constrói, inicia e verifica todos os containers |
 | 12 | Exibe URL e credenciais iniciais do painel |
+| 13 | Importa o inventário inicial Datacom/ZTE/Huawei, solicitando a senha de forma oculta e sem publicá-la no Git |
 
 Após o setup, abra a URL exibida pelo instalador e cadastre as OLTs escolhendo fabricante e modelo. Para conferir os serviços:
 
 ```bash
 cd /opt/bkpolts && docker compose ps
+```
+
+Na primeira instalação, o setup solicita no terminal a senha comum das OLTs para o usuário `bkpolt` e importa automaticamente o inventário em `inventory/initial_olts.json`. A operação é idempotente por IP: instalações repetidas atualizam as credenciais e não criam equipamentos duplicados. A senha existe apenas no `.env` protegido do servidor e nunca é versionada.
+
+Também é possível importar diretamente um export de hosts do Zabbix; apenas hosts Datacom, ZTE e Huawei são reconhecidos atualmente:
+
+```bash
+python3 import_inventory.py /caminho/zbx_export_hosts.json --username bkpolt
 ```
 
 ---
