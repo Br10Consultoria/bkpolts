@@ -39,6 +39,17 @@ log = setup_logging("datacom")
 
 TFTP_IP = os.getenv("TFTP_IP", "")
 BACKUP_DIR = "/app/backups"
+STOP_ON_ERROR = os.getenv("STOP_ON_ERROR", "true").lower() in {"1", "true", "yes", "sim"}
+
+
+def tftp_failure_reason(response: str) -> str | None:
+    if not re.search(r"(?i)(upload transfer failed|transfer failed|\berror(?:s)?\s*:|timed?\s*out)", response):
+        return None
+    return next(
+        (line.strip() for line in response.splitlines()
+         if re.search(r"(?i)(failed|error|timed?\s*out)", line)),
+        "A OLT recusou ou não conseguiu concluir o envio TFTP",
+    )
 
 
 @tracked_backup("datacom", "tftp")
@@ -74,7 +85,19 @@ def backup_datacom(olt: dict, progresso: str) -> bool:
         time.sleep(10)
 
         # Enviar para o TFTP
-        send_telnet_command(tn, f"copy file {filename} tftp://{TFTP_IP}", wait_time=30)
+        transfer_response = send_telnet_command(
+            tn, f"copy file {filename} tftp://{TFTP_IP}", wait_time=30
+        )
+
+        # DmOS informa a falha no próprio retorno do comando. Antes esta
+        # resposta era ignorada e o processo aguardava o arquivo por 180s.
+        reason = tftp_failure_reason(transfer_response)
+        if reason:
+            log.error("TFTP rejeitado pela OLT %s: %s", name, reason)
+            tn.write(b"exit\n")
+            tn.close()
+            send_message(f"❌ {progresso} {name} — TFTP: {reason}")
+            return False
 
         tn.write(b"exit\n")
         tn.close()
@@ -137,6 +160,10 @@ def main():
             ok.append(olt["name"])
         else:
             fail.append(olt["name"])
+            if STOP_ON_ERROR:
+                log.error("STOP_ON_ERROR ativo — interrompendo o lote após falha em %s", olt["name"])
+                send_message(f"⛔ Datacom: lote interrompido automaticamente após falha em {olt['name']}")
+                break
         log.info("Aguardando 10s...")
         time.sleep(10)
 

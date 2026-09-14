@@ -179,6 +179,8 @@ O instalador sobe seis serviços: `olt-backup` (scheduler), `webui` (painel), `s
 
 O painel azul e branco apresenta disponibilidade SNMP, gráfico de sucessos e falhas, processos em execução e histórico por OLT com o motivo do erro. A coleta consulta `sysName`, `sysDescr` e `sysUpTime` a cada 300 segundos e ignora OLTs desativadas. O histórico e as amostras ficam no volume persistente `app-data`.
 
+O SNMP é coletado continuamente pelo serviço `snmp-monitor`, independentemente do horário dos backups. Por padrão, `STOP_ON_ERROR=true` interrompe o restante do lote do vendor na primeira falha. No Datacom, respostas como `Upload transfer failed` encerram imediatamente a tentativa e são gravadas no histórico, sem aguardar o timeout do arquivo.
+
 Para importar também as communities individuais do export do Zabbix, copie o arquivo original para `inventory/zbx_export_hosts.json` antes de executar `setup.sh`. Esse arquivo está no `.gitignore`: os segredos são gravados somente em `SNMP_COMMUNITIES_JSON` no `.env` protegido do servidor e nunca aparecem na interface ou nos logs. Também é possível importar depois:
 
 ```bash

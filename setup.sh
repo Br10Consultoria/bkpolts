@@ -319,6 +319,16 @@ configure_runtime() {
     server_ip=$(ip -4 route get 1.1.1.1 2>/dev/null | awk '{for(i=1;i<=NF;i++) if($i=="src") {print $(i+1); exit}}' || true)
     server_ip="${server_ip:-127.0.0.1}"
 
+    # O receptor TFTP deste projeto usa a porta 69/UDP diretamente no host.
+    # Desativa apenas daemons TFTP conhecidos para evitar duas instâncias
+    # disputando a mesma porta e gravando em diretórios diferentes.
+    for legacy_tftp in tftpd-hpa atftpd; do
+        if systemctl is-active --quiet "$legacy_tftp" 2>/dev/null; then
+            log_warn "Desativando serviço conflitante ${legacy_tftp}; o container olt-backup-tftp assumirá a porta 69/UDP."
+            systemctl disable --now "$legacy_tftp"
+        fi
+    done
+
     ensure_env_value WEBUI_SECRET_KEY "$(openssl rand -hex 32)"
     ensure_env_value WEBUI_USER admin
     if grep -q '^WEBUI_PASSWORD=DEFINA_UMA_SENHA_FORTE_AQUI$' "$env_file"; then
