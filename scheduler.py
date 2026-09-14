@@ -116,6 +116,7 @@ def run_vendor(vendor: str, env: dict):
 
     log.info("Iniciando backup: %s", vendor.upper())
     merged_env = {**os.environ, **env}
+    merged_env["BACKUP_SOURCE"] = "scheduler"
     job_id = start_job(vendor, source="scheduler")
     proc = subprocess.Popen(
         [sys.executable, str(script)],

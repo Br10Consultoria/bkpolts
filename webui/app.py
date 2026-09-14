@@ -30,7 +30,7 @@ import time
 from functools import wraps
 from pathlib import Path
 
-from flask import Flask, Response, flash, redirect, render_template, request, session, stream_with_context, url_for
+from flask import Flask, Response, flash, jsonify, redirect, render_template, request, session, stream_with_context, url_for
 
 BASE_DIR = Path(__file__).resolve().parent.parent
 ENV_FILE = BASE_DIR / ".env"
@@ -45,6 +45,7 @@ from common.vendors import VENDORS, vendor_labels  # noqa: E402
 from common.job_control import (  # noqa: E402
     finish_job, is_cancelled, read_job, request_cancel, start_job, terminate_process, touch_job,
 )
+from common.observability import cancel_running_runs, dashboard_data, latest_snmp  # noqa: E402
 
 # Cada vendor pode ter mais de uma lista de OLTs (ex.: ZTE padrão + Titan
 # são dois grupos dentro do mesmo vendor/script). Formato:
@@ -60,6 +61,16 @@ VENDOR_LABELS = vendor_labels()
 
 app = Flask(__name__)
 app.secret_key = os.getenv("WEBUI_SECRET_KEY") or secrets.token_hex(32)
+
+
+@app.template_filter("datetime_br")
+def datetime_br(value):
+    if not value:
+        return "—"
+    try:
+        return time.strftime("%d/%m/%Y %H:%M", time.strptime(value[:19], "%Y-%m-%dT%H:%M:%S"))
+    except ValueError:
+        return value
 
 # Processos de backup em execução, por chave "vendor" ou "vendor:OLT"
 _jobs_lock = threading.Lock()
@@ -129,6 +140,16 @@ def count_olts(env: dict, vendor: str) -> int:
     return total
 
 
+def inventory(env: dict) -> list[dict]:
+    result = []
+    for vendor, groups in VENDOR_OLT_VARS.items():
+        for env_var, _ in groups:
+            disabled = disabled_names(env, env_var)
+            result.extend({**olt, "vendor": vendor, "enabled": olt["name"] not in disabled}
+                          for olt in parse_olts_raw(env.get(env_var, "")))
+    return result
+
+
 def job_key(vendor: str, olt_name: str | None = None) -> str:
     return f"{vendor}:{olt_name}" if olt_name else vendor
 
@@ -189,6 +210,7 @@ def start_backup(vendor: str, olt_name: str | None = None) -> bool:
 
         script = BASE_DIR / "vendors" / VENDOR_SCRIPT[vendor] / "backup.py"
         env = {**os.environ, **load_env(ENV_FILE)}
+        env["BACKUP_SOURCE"] = "webui"
         if olt_name:
             env["OLT_ONLY"] = olt_name
         else:
@@ -249,6 +271,7 @@ def stop_backup(vendor: str, olt_name: str | None = None) -> bool:
         _running_jobs.pop(key, None)
 
     stopped_pkill = _pkill_vendor_script(vendor)
+    cancel_running_runs(vendor, olt_name)
     return True
 
 
@@ -275,6 +298,9 @@ def vendor_log_path(vendor: str) -> Path:
 @login_required
 def dashboard():
     env = load_env(ENV_FILE)
+    devices = inventory(env)
+    snmp = latest_snmp()
+    observed = dashboard_data()
     vendors = [
         {
             "key": key,
@@ -285,7 +311,31 @@ def dashboard():
         for key in VENDOR_OLT_VARS
     ]
     telegram_ok = bool(env.get("TELEGRAM_TOKEN")) and bool(env.get("TELEGRAM_CHAT_ID"))
-    return render_template("dashboard.html", vendors=vendors, telegram_ok=telegram_ok)
+    online = sum(1 for device in devices if snmp.get(device["name"], {}).get("reachable"))
+    offline = sum(1 for device in devices if device["name"] in snmp and not snmp[device["name"]]["reachable"])
+    successes = observed["totals"].get("success", 0)
+    failures = sum(observed["totals"].get(k, 0) for k in ("failure", "error", "cancelled"))
+    total_finished = successes + failures
+    return render_template("dashboard.html", vendors=vendors, telegram_ok=telegram_ok,
+                           devices=devices, snmp=snmp, observed=observed,
+                           online=online, offline=offline,
+                           success_rate=round(successes * 100 / total_finished) if total_finished else 0)
+
+
+@app.route("/api/dashboard")
+@login_required
+def dashboard_api():
+    data = dashboard_data()
+    statuses = latest_snmp()
+    data["snmp"] = {"online": sum(bool(x["reachable"]) for x in statuses.values()),
+                    "offline": sum(not bool(x["reachable"]) for x in statuses.values())}
+    return jsonify(data)
+
+
+@app.route("/history")
+@login_required
+def history():
+    return render_template("history.html", runs=dashboard_data(30, 250)["recent"])
 
 
 @app.route("/vendor/<vendor>")
@@ -297,6 +347,7 @@ def vendor_page(vendor):
 
     env = load_env(ENV_FILE)
     shared_job = read_job(vendor)
+    snmp_status = latest_snmp()
     groups = []
     for var, section_label in VENDOR_OLT_VARS[vendor]:
         model = next(m for m in VENDORS[vendor]["models"] if m["env_var"] == var)
@@ -308,6 +359,7 @@ def vendor_page(vendor):
                 is_running(job_key(vendor, olt["name"]))
                 or bool(shared_job and shared_job.get("target") == olt["name"])
             )
+            olt["snmp"] = snmp_status.get(olt["name"])
         groups.append({
             "var": var,
             "label": section_label,
@@ -588,6 +640,7 @@ def settings():
             "SFTP_USER": request.form.get("sftp_user", "").strip(),
             "SFTP_PASSWORD": request.form.get("sftp_password", ""),
             "INTELBRAS_BACKUP_METHOD": request.form.get("intelbras_backup_method", "ftp"),
+            "SNMP_INTERVAL_SECONDS": request.form.get("snmp_interval_seconds", "300").strip(),
         }
         if updates["INTELBRAS_BACKUP_METHOD"] not in {"ftp", "tftp"}:
             updates["INTELBRAS_BACKUP_METHOD"] = "ftp"

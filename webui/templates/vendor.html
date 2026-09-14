@@ -30,7 +30,7 @@
   <h2>{{ group.label }} <span class="badge ok">{{ group.protocols }}</span> <span class="muted">({{ group.olts|length }} OLT(s))</span></h2>
   <p class="muted">O driver e os comandos corretos são selecionados automaticamente para este modelo.</p>
   <table>
-    <tr><th>Nome</th><th>IP</th><th>Usuário</th><th>Status</th><th></th></tr>
+    <tr><th>Nome</th><th>IP</th><th>Usuário</th><th>Backup</th><th>SNMP</th><th></th></tr>
     {% for olt in group.olts %}
     <tr {% if not olt.enabled %}style="opacity:.55;"{% endif %}>
       <td>{{ olt.name }}</td>
@@ -44,6 +44,11 @@
         {% else %}
           <span class="badge">desativada</span>
         {% endif %}
+      </td>
+      <td>
+        {% if olt.snmp and olt.snmp.reachable %}<span class="badge ok"><span class="dot"></span>online</span>
+        {% elif olt.snmp %}<span class="badge error"><span class="dot"></span>offline</span>
+        {% else %}<span class="badge">aguardando</span>{% endif %}
       </td>
       <td style="white-space:nowrap;">
         {% if olt.running %}
@@ -75,7 +80,7 @@
       </td>
     </tr>
     {% else %}
-    <tr><td colspan="5" class="muted">Nenhuma OLT cadastrada.</td></tr>
+    <tr><td colspan="6" class="muted">Nenhuma OLT cadastrada.</td></tr>
     {% endfor %}
   </table>
 

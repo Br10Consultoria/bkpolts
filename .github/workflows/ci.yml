@@ -23,7 +23,7 @@ jobs:
         run: |
           docker compose up -d
           sleep 8
-          if [ "$(docker compose ps --status running --services | wc -l)" -ne 5 ]; then
+          if [ "$(docker compose ps --status running --services | wc -l)" -ne 6 ]; then
             docker compose ps
             docker compose logs
             exit 1

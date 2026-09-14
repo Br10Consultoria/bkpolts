@@ -31,6 +31,7 @@ sys.path.insert(0, "/app")
 from common.helpers import ftp_download_rename, cleanup_file, setup_logging, redact_secrets
 from common.telegram import send_message, send_file
 from common.parser import parse_olts
+from common.observability import tracked_backup
 
 log = setup_logging("intelbras_g16")
 
@@ -50,6 +51,7 @@ def _send_cmd(tn: telnetlib.Telnet, cmd: str, wait: float = 1.0):
     time.sleep(wait)
 
 
+@tracked_backup("intelbras_g16", os.getenv("INTELBRAS_BACKUP_METHOD", "ftp"))
 def backup_intelbras_g16(olt: dict, progresso: str) -> bool:
     name     = olt["name"]
     ip       = olt["ip"]

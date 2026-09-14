@@ -27,6 +27,7 @@ sys.path.insert(0, "/app")
 from common.helpers import ftp_download_rename, cleanup_file, setup_logging, redact_secrets
 from common.telegram import send_message, send_file
 from common.parser import parse_olts
+from common.observability import tracked_backup
 
 log = setup_logging("huawei")
 
@@ -37,6 +38,7 @@ FTP_PASSWORD = os.getenv("FTP_PASSWORD", "")
 UPLOAD_WAIT  = 30   # segundos aguardando o upload FTP concluir na OLT
 
 
+@tracked_backup("huawei", "ftp")
 def backup_huawei(olt: dict, progresso: str) -> bool:
     name     = olt["name"]
     ip       = olt["ip"]

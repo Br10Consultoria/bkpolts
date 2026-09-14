@@ -28,6 +28,7 @@ from common.helpers import (
 )
 from common.telegram import send_message, send_file
 from common.parser import parse_olts
+from common.observability import tracked_backup
 
 log = setup_logging("parks")
 
@@ -36,6 +37,7 @@ FTP_USER = os.getenv("FTP_USER", "")
 FTP_PASSWORD = os.getenv("FTP_PASSWORD", "")
 
 
+@tracked_backup("parks", "ftp")
 def backup_parks(olt: dict, progresso: str) -> bool:
     name = olt["name"]
     ip = olt["ip"]

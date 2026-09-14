@@ -32,6 +32,7 @@ from common.helpers import (
 )
 from common.telegram import send_message, send_file
 from common.parser import parse_olts
+from common.observability import tracked_backup
 
 log = setup_logging("zte")
 
@@ -44,6 +45,7 @@ FTP_PASSWORD = os.getenv("FTP_PASSWORD", "")
 # ZTE padrão
 # ============================================================
 
+@tracked_backup("zte", "ftp")
 def backup_zte(olt: dict, progresso: str) -> bool:
     name = olt["name"]
     ip = olt["ip"]
@@ -100,6 +102,7 @@ def backup_zte(olt: dict, progresso: str) -> bool:
 # ZTE Titan
 # ============================================================
 
+@tracked_backup("zte", "ftp")
 def backup_zte_titan(olt: dict, progresso: str) -> bool:
     name = olt["name"]
     ip = olt["ip"]

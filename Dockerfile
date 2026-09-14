@@ -9,7 +9,7 @@ ENV PYTHONPATH=/app
 # o botão "Parar" encerre um backup mesmo que o painel tenha perdido o
 # rastro do processo, ex.: após reiniciar o container).
 RUN apt-get update && \
-    apt-get install -y --no-install-recommends tzdata procps tftp-hpa openssh-client && \
+    apt-get install -y --no-install-recommends tzdata procps tftp-hpa openssh-client snmp && \
     apt-get clean && \
     rm -rf /var/lib/apt/lists/*
 
@@ -24,7 +24,7 @@ COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
 # Cria diretórios necessários (persistidos por volumes nomeados)
-RUN mkdir -p /app/logs /app/backups
+RUN mkdir -p /app/logs /app/backups /app/data
 
 # Usa python3 diretamente como entrypoint para evitar problema de
 # permissão do entrypoint.sh quando a raiz é montada como volume.

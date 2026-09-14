@@ -27,6 +27,7 @@ sys.path.insert(0, "/app")
 from common.helpers import ftp_download_rename, cleanup_file, setup_logging, redact_secrets
 from common.telegram import send_message, send_file
 from common.parser import parse_olts
+from common.observability import tracked_backup
 
 log = setup_logging("fiberhome")
 
@@ -51,6 +52,7 @@ def read_until(tn: telnetlib.Telnet, expected: bytes, timeout: int = TIMEOUT) ->
     return data
 
 
+@tracked_backup("fiberhome", "ftp")
 def backup_fiberhome(olt: dict, progresso: str) -> bool:
     name = olt["name"]
     ip   = olt["ip"]

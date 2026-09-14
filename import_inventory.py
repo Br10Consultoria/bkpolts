@@ -29,7 +29,8 @@ def detect_device(host: dict) -> dict | None:
     vendor = next((item for item in ("datacom", "huawei", "zte") if item in text), None)
     if not vendor:
         return None
-    ip = next((i.get("ip") for i in host.get("interfaces", []) if i.get("ip")), "")
+    interface = next((i for i in host.get("interfaces", []) if i.get("ip")), {})
+    ip = interface.get("ip", "")
     if not ip:
         return None
     if vendor == "zte":
@@ -38,7 +39,9 @@ def detect_device(host: dict) -> dict | None:
         model = "dmos"
     else:
         model = "ma5xxx"
-    return {"name": safe_name(name), "ip": ip, "vendor": vendor, "model": model}
+    community = (interface.get("details") or {}).get("community", "")
+    return {"name": safe_name(name), "ip": ip, "vendor": vendor, "model": model,
+            "snmp_community": community}
 
 
 def load_devices(path: Path) -> tuple[list[dict], str]:
@@ -91,6 +94,16 @@ def import_devices(devices: list[dict], username: str, password: str, env_file: 
                 enabled_vendors.add(vendor)
                 break
     updates["VENDOR"] = ",".join(v for v in VENDORS if v in enabled_vendors)
+    snmp = {}
+    try:
+        snmp = json.loads(env.get("SNMP_COMMUNITIES_JSON", "{}"))
+    except json.JSONDecodeError:
+        pass
+    for device in devices:
+        if device.get("snmp_community"):
+            snmp[device["ip"]] = device["snmp_community"]
+    if snmp:
+        updates["SNMP_COMMUNITIES_JSON"] = json.dumps(snmp, separators=(",", ":"))
     save_env(env_file, updates)
     return counts
 

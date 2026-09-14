@@ -173,7 +173,19 @@ docker compose up -d --build
 
 ## Interface Web
 
-O instalador sobe cinco serviços: `olt-backup` (scheduler), `webui` (painel), `tftp`, `ftp` e `sftp` (SCP/SFTP). O painel escuta em `http://<ip-do-servidor>:8080` e o instalador exibe a senha inicial gerada automaticamente.
+O instalador sobe seis serviços: `olt-backup` (scheduler), `webui` (painel), `snmp-monitor`, `tftp`, `ftp` e `sftp` (SCP/SFTP). O painel escuta em `http://<ip-do-servidor>:8080` e o instalador exibe a senha inicial gerada automaticamente.
+
+### Monitoramento SNMP e histórico
+
+O painel azul e branco apresenta disponibilidade SNMP, gráfico de sucessos e falhas, processos em execução e histórico por OLT com o motivo do erro. A coleta consulta `sysName`, `sysDescr` e `sysUpTime` a cada 300 segundos e ignora OLTs desativadas. O histórico e as amostras ficam no volume persistente `app-data`.
+
+Para importar também as communities individuais do export do Zabbix, copie o arquivo original para `inventory/zbx_export_hosts.json` antes de executar `setup.sh`. Esse arquivo está no `.gitignore`: os segredos são gravados somente em `SNMP_COMMUNITIES_JSON` no `.env` protegido do servidor e nunca aparecem na interface ou nos logs. Também é possível importar depois:
+
+```bash
+cd /opt/bkpolts
+python3 import_inventory.py inventory/zbx_export_hosts.json --username bkpolt
+docker compose restart snmp-monitor webui
+```
 
 Login: usuário/senha definidos em `WEBUI_USER` / `WEBUI_PASSWORD` no `.env`. **Não exponha essa porta na internet** mesmo com login habilitado — mantenha atrás de VPN/firewall, como já se faz hoje com o acesso Telnet às próprias OLTs.
 

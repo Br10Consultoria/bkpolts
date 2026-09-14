@@ -33,6 +33,7 @@ sys.path.insert(0, "/app")
 from common.helpers import setup_logging, send_telnet_command, cleanup_file
 from common.telegram import send_message, send_file
 from common.parser import parse_olts
+from common.observability import tracked_backup
 
 log = setup_logging("datacom")
 
@@ -40,6 +41,7 @@ TFTP_IP = os.getenv("TFTP_IP", "")
 BACKUP_DIR = "/app/backups"
 
 
+@tracked_backup("datacom", "tftp")
 def backup_datacom(olt: dict, progresso: str) -> bool:
     name = olt["name"]
     ip = olt["ip"]

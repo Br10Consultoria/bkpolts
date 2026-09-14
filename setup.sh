@@ -378,7 +378,8 @@ deploy_services() {
        docker compose ps --status running --services | grep -qx 'webui' && \
        docker compose ps --status running --services | grep -qx 'tftp' && \
        docker compose ps --status running --services | grep -qx 'ftp' && \
-       docker compose ps --status running --services | grep -qx 'sftp'; then
+       docker compose ps --status running --services | grep -qx 'sftp' && \
+       docker compose ps --status running --services | grep -qx 'snmp-monitor'; then
         log_ok "Scheduler, painel, TFTP, FTP e SCP/SFTP estão em execução."
     else
         docker compose ps
@@ -390,6 +391,11 @@ deploy_services() {
 import_initial_inventory() {
     local env_file="${REPO_DIR}/.env"
     local inventory_file="${REPO_DIR}/inventory/initial_olts.json"
+    # Se o export original for copiado para inventory/ antes da instalação,
+    # ele tem prioridade e também importa as communities SNMP por IP.
+    if [[ -f "${REPO_DIR}/inventory/zbx_export_hosts.json" ]]; then
+        inventory_file="${REPO_DIR}/inventory/zbx_export_hosts.json"
+    fi
     if [[ ! -f "$inventory_file" ]] || grep -q '^INITIAL_INVENTORY_IMPORTED=1$' "$env_file"; then
         return 0
     fi
@@ -408,7 +414,7 @@ import_initial_inventory() {
     fi
     printf '%s\n' "$olt_password" | docker compose run --rm -T \
         --entrypoint python3 olt-backup /app/import_inventory.py \
-        /app/inventory/initial_olts.json --username bkpolt --password-stdin
+        "/app/inventory/$(basename "$inventory_file")" --username bkpolt --password-stdin
     unset olt_password
     set_env_value INITIAL_INVENTORY_IMPORTED 1
     chmod 0600 "$env_file"

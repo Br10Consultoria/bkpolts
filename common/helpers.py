@@ -9,6 +9,7 @@ import logging
 import ftplib
 import re
 from datetime import datetime
+from common.observability import HistoryErrorHandler
 
 
 def redact_secrets(value: str) -> str:
@@ -35,6 +36,7 @@ def setup_logging(vendor_name: str):
         handlers=[
             logging.FileHandler(log_file),
             logging.StreamHandler(sys.stdout),
+            HistoryErrorHandler(),
         ],
     )
     return logging.getLogger("olt-backup")

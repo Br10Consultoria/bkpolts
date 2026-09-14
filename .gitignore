@@ -1,5 +1,7 @@
 # Credenciais
 .env
+inventory/zbx_export_hosts.json
+data/
 
 # Logs e backups
 logs/

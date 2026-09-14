@@ -11,6 +11,7 @@ services:
       - .:/app                           # raiz do projeto — git pull reflete imediatamente
       - ${DATACOM_BACKUP_DIR:-backup-data}:/app/backups  # mesmo volume que o serviço tftp escreve
       - backup-logs:/app/logs            # logs de execução (volume persistente)
+      - app-data:/app/data               # histórico e telemetria persistentes
       - /etc/localtime:/etc/localtime:ro
     environment:
       - TZ=America/Bahia
@@ -29,10 +30,27 @@ services:
       - .:/app
       - ${DATACOM_BACKUP_DIR:-backup-data}:/app/backups  # mesmo volume do olt-backup
       - backup-logs:/app/logs
+      - app-data:/app/data
       - /etc/localtime:/etc/localtime:ro
     environment:
       - TZ=America/Bahia
     network_mode: host                   # o botão "backup agora" precisa alcançar as OLTs
+
+  snmp-monitor:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: olt-backup-snmp
+    entrypoint: ["python3", "/app/snmp_collector.py"]
+    restart: unless-stopped
+    env_file: [.env]
+    volumes:
+      - .:/app
+      - app-data:/app/data
+      - /etc/localtime:/etc/localtime:ro
+    environment:
+      - TZ=America/Bahia
+    network_mode: host
 
   tftp:
     build:
@@ -72,4 +90,6 @@ volumes:
   backup-logs:
     driver: local
   sftp-host-keys:
+    driver: local
+  app-data:
     driver: local

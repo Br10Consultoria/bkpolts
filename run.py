@@ -75,6 +75,7 @@ def run_vendor(vendor: str, env: dict):
 
     # Monta ambiente com variáveis do .env + ambiente atual
     merged_env = {**os.environ, **env}
+    merged_env["BACKUP_SOURCE"] = "cli"
 
     print(f"\n{'='*56}")
     print(f"  Executando backup: {VENDOR_LABELS.get(vendor, vendor)}")
